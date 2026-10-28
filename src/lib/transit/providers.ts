@@ -1,25 +1,36 @@
-import { MOCK_DESTINATIONS, MOCK_ORIGINS, mockRouteProvider, mockTimetableProvider } from './mock';
-import type { RouteProvider, Station, TimetableProvider } from './types';
+import 'server-only';
+
+import { MOCK_STATIONS, mockRouteProvider, mockTimetableProvider } from './mock';
+import { odsayRouteProvider } from './odsay';
+import { seoulStations, seoulTimetableProvider } from './seoul';
+import type { RouteProvider, StationOption, TimetableProvider } from './types';
 
 export interface TransitProviders {
   isMock: boolean;
   routes: RouteProvider;
   timetable: TimetableProvider;
-  origins: Station[];
-  destinations: Station[];
+  stations: () => Promise<StationOption[]>;
 }
 
 /**
- * 서버 전용. 지금은 항상 mock.
- * TODO(연동): ODSAY_API_KEY(경로) + DATA_GO_KR_KEY(시간표)가 있으면 live provider로 교체.
- *   응답 shape는 키 발급 후 실제 호출로 확인하고 작성할 것 (추측 구현 금지).
+ * 키 두 개가 모두 있으면 실데이터, 하나라도 없으면 샘플 데이터.
+ * 실데이터 호출이 실패해도 샘플로 몰래 바꾸지 않는다 (화면에 오류 표시).
  */
 export function getProviders(): TransitProviders {
+  const live = Boolean(process.env.ODSAY_API_KEY && process.env.SEOUL_OPEN_API_KEY);
+
+  if (!live) {
+    return {
+      isMock: true,
+      routes: mockRouteProvider,
+      timetable: mockTimetableProvider,
+      stations: async () => MOCK_STATIONS,
+    };
+  }
   return {
-    isMock: true,
-    routes: mockRouteProvider,
-    timetable: mockTimetableProvider,
-    origins: MOCK_ORIGINS,
-    destinations: MOCK_DESTINATIONS,
+    isMock: false,
+    routes: odsayRouteProvider,
+    timetable: seoulTimetableProvider,
+    stations: seoulStations,
   };
 }

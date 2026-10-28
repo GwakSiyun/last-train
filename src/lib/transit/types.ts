@@ -7,60 +7,79 @@ export type DayType = 'WEEKDAY' | 'SATURDAY' | 'HOLIDAY';
  */
 export type ServiceMinutes = number;
 
-export interface Station {
-  id: string;
+export interface Place {
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+/** 역 선택지 (도착역·출발역 검색용) */
+export interface StationOption extends Place {
+  lines: string[];
+}
+
+export interface SegmentStation {
   name: string;
 }
 
 /** 한 노선을 한 방향으로 타고 가는 구간 */
 export interface Segment {
+  /** 표시용 노선명 (예: "2호선") */
   line: string;
-  /** 방면 표시 (예: "합정 방면") */
+  /** 방면 표시 (예: "교대 방면") */
   direction: string;
-  from: Station;
-  to: Station;
+  from: SegmentStation;
+  to: SegmentStation;
+  /** 경로 API가 준 예상 소요시간 — 시간표 조회 시 이상치 필터에 사용 */
   rideMinutes: number;
 }
 
 export interface Route {
   segments: Segment[];
+  /** 출발지 → 첫 역 도보 */
+  walkToFirstStationMinutes: number;
   /** segments[i] → segments[i+1] 환승 도보 시간. 길이 = segments.length - 1 */
   transferWalkMinutes: number[];
 }
 
-export interface DepartureQuery {
+export interface RouteProvider {
+  findRoutes(origin: Place, destination: Place): Promise<Route[]>;
+}
+
+export interface TrainQuery {
   segment: Segment;
   dayType: DayType;
-  /** 이 시각 이전(포함) 출발 열차 중 가장 늦은 것. 없으면 막차. */
-  notAfter?: ServiceMinutes;
+  /** 내릴 역에 이 시각까지 도착하는 열차 중 가장 늦게 출발하는 것. 없으면 막차. */
+  arriveBy?: ServiceMinutes;
 }
 
-export interface RouteProvider {
-  findRoute(fromId: string, toId: string): Promise<Route | null>;
-}
+export type TrainResult =
+  | { status: 'OK'; departAt: ServiceMinutes; arriveAt: ServiceMinutes }
+  | { status: 'NO_TRAIN' }
+  /** 시간표 데이터가 없는 노선·역 (예: 신분당선) */
+  | { status: 'UNSUPPORTED' };
 
 export interface TimetableProvider {
-  /** 조건에 맞는 열차가 없으면 null */
-  latestDeparture(query: DepartureQuery): Promise<ServiceMinutes | null>;
+  latestTrain(query: TrainQuery): Promise<TrainResult>;
 }
 
 export interface PlannedLeg {
   segment: Segment;
   departAt: ServiceMinutes;
   arriveAt: ServiceMinutes;
-  /** 이 구간이 해당 역·노선·방면의 막차인지 */
+  /** 이 구간이 내릴 역까지 가는 막차인지 */
   isLastTrain: boolean;
 }
 
 export type PlanResult =
   | {
       ok: true;
+      route: Route;
       legs: PlannedLeg[];
-      transferWalkMinutes: number[];
       /** 첫 열차 출발 시각 */
       boardBy: ServiceMinutes;
       /** 현재 위치에서 출발해야 하는 시각 (도보·여유 포함) */
       leaveBy: ServiceMinutes;
       arriveAt: ServiceMinutes;
     }
-  | { ok: false; reason: 'NO_TRAIN'; segment: Segment };
+  | { ok: false; route: Route; reason: 'NO_TRAIN' | 'UNSUPPORTED'; segment: Segment };
