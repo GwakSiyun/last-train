@@ -7,14 +7,14 @@ interface SearchFormProps {
 }
 
 const fieldClass =
-  'w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none placeholder:text-white/30 focus:border-indigo-400';
+  'w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none placeholder:text-white/30 focus:border-indigo-400';
 
 const STATION_LIST_ID = 'station-list';
 
 /** GET 폼 — 위치 버튼만 client, 나머지는 searchParams로 서버에 전달 */
 export default function SearchForm({ stations, defaults }: SearchFormProps) {
   return (
-    <form method="GET" className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+    <form method="GET" className="grid gap-2.5 rounded-2xl border border-white/10 bg-white/[0.03] p-3.5">
       <datalist id={STATION_LIST_ID}>
         {/* 텍스트 = 자동완성 목록에 보이는 보조 설명 (예: "2호선 · 신분당선") */}
         {stations.map((s) => (
@@ -24,7 +24,7 @@ export default function SearchForm({ stations, defaults }: SearchFormProps) {
         ))}
       </datalist>
 
-      <label className="grid gap-1.5 text-xs text-white/60">
+      <label className="grid gap-1 text-xs text-white/60">
         도착역
         <input
           name="to"
@@ -43,8 +43,10 @@ export default function SearchForm({ stations, defaults }: SearchFormProps) {
         defaultLng={defaults.lng}
       />
 
-      <label className="grid gap-1.5 text-xs text-white/60">
-        또는 출발역 직접 입력 (입력하면 현재 위치보다 우선)
+      <label className="grid gap-1 text-xs text-white/60">
+        <span>
+          또는 출발역 입력 <span className="text-white/30">(현재 위치보다 우선)</span>
+        </span>
         <input
           name="from"
           list={STATION_LIST_ID}
@@ -57,7 +59,7 @@ export default function SearchForm({ stations, defaults }: SearchFormProps) {
 
       <button
         type="submit"
-        className="mt-1 rounded-xl bg-indigo-500 py-3 text-sm font-semibold text-white hover:bg-indigo-400"
+        className="rounded-xl bg-indigo-500 py-2.5 text-sm font-semibold text-white hover:bg-indigo-400"
       >
         막차 계산하기
       </button>

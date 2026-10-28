@@ -56,15 +56,43 @@ export async function planLastTrain(
   };
 }
 
-/** 모든 경로를 계산해 가장 늦게 출발해도 되는 순으로 정렬. 계산 불가 경로는 뒤로. */
+type OkPlan = Extract<PlanResult, { ok: true }>;
+
+/** 늦게 출발 / 최단 시간 / 최소 환승 */
+export type SortKey = 'late' | 'fast' | 'transfer';
+
+export const SORT_KEYS: readonly SortKey[] = ['late', 'fast', 'transfer'];
+
+/** 막차 기준으로 탔을 때 현재 위치 출발 → 최종 도착 (여유 시간 제외, 환승 대기 포함) */
+export function tripMinutes(plan: OkPlan): number {
+  return plan.arriveAt - (plan.boardBy - plan.route.walkToFirstStationMinutes);
+}
+
+export function transferCount(plan: PlanResult): number {
+  return plan.route.segments.length - 1;
+}
+
+const COMPARE: Record<SortKey, (a: OkPlan, b: OkPlan) => number> = {
+  late: (a, b) => b.leaveBy - a.leaveBy,
+  fast: (a, b) => tripMinutes(a) - tripMinutes(b) || b.leaveBy - a.leaveBy,
+  transfer: (a, b) => transferCount(a) - transferCount(b) || b.leaveBy - a.leaveBy,
+};
+
+/** 계산 불가 경로는 항상 뒤로 */
+export function sortPlans(plans: PlanResult[], key: SortKey): PlanResult[] {
+  return [...plans].sort((a, b) => {
+    if (a.ok && b.ok) return COMPARE[key](a, b);
+    return a.ok ? -1 : b.ok ? 1 : 0;
+  });
+}
+
+/** 모든 경로를 계산해 정렬 (기본: 가장 늦게 출발해도 되는 순) */
 export async function planAllRoutes(
   routes: Route[],
   timetable: TimetableProvider,
   options: PlanOptions,
+  sort: SortKey = 'late',
 ): Promise<PlanResult[]> {
   const results = await Promise.all(routes.map((r) => planLastTrain(r, timetable, options)));
-  return results.sort((a, b) => {
-    if (a.ok && b.ok) return b.leaveBy - a.leaveBy;
-    return a.ok ? -1 : b.ok ? 1 : 0;
-  });
+  return sortPlans(results, sort);
 }

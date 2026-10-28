@@ -1,5 +1,6 @@
 import LegTimeline from './LegTimeline';
 import { RouteLines } from './LineBadge';
+import { routeStats } from './PlanResultCard';
 import { stationLabel } from '@/lib/transit/lines';
 import { formatClock } from '@/lib/transit/time';
 import type { PlanResult } from '@/lib/transit/types';
@@ -39,7 +40,10 @@ export default function OtherRoutes({ plans }: OtherRoutesProps) {
             <li key={i}>
               <details className="group rounded-xl bg-white/[0.03]">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
-                  <RouteLines lines={lines} />
+                  <span className="grid gap-1">
+                    <RouteLines lines={lines} />
+                    <span className="text-[11px] text-white/40">{routeStats(plan)}</span>
+                  </span>
                   <span className="flex shrink-0 items-center gap-2 text-sm tabular-nums text-white/70">
                     {formatClock(plan.leaveBy)} 출발
                     <span className="text-xs text-white/40 transition-transform group-open:rotate-180">▾</span>

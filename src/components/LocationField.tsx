@@ -89,7 +89,7 @@ export default function LocationField({ stations, defaultLat, defaultLng }: Loca
           type="button"
           onClick={(e) => locate(e.currentTarget)}
           disabled={status.kind === 'loading'}
-          className="flex-1 rounded-xl border border-indigo-400/40 bg-indigo-500/10 py-2.5 text-sm font-medium text-indigo-100 hover:bg-indigo-500/20 disabled:opacity-60"
+          className="flex-1 rounded-xl border border-indigo-400/40 bg-indigo-500/10 py-2 text-sm font-medium text-indigo-100 hover:bg-indigo-500/20 disabled:opacity-60"
         >
           {status.kind === 'loading' ? '위치 확인 중…' : '📍 현재 위치에서 출발'}
         </button>
@@ -107,7 +107,7 @@ export default function LocationField({ stations, defaultLat, defaultLng }: Loca
         )}
       </div>
       {status.kind === 'ready' && (
-        <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-3 py-2">
+        <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-3 py-1.5">
           {closest && closest.meters <= NEARBY_LIMIT_M ? (
             <p className="flex flex-wrap items-center gap-1.5 text-sm text-emerald-100">
               가장 가까운 역: <strong>{stationLabel(closest.item.name)}</strong>
@@ -123,9 +123,11 @@ export default function LocationField({ stations, defaultLat, defaultLng }: Loca
                 : '역 목록이 없어 가까운 역을 찾지 못했어요.'}
             </p>
           )}
-          <p className="mt-0.5 text-xs text-emerald-300/70">
-            현재 위치 사용 중{status.accuracy ? ` (오차 약 ${status.accuracy}m)` : ''} · 실제 탈 역과 걷는
-            시간은 계산 결과에 나와요
+          <p
+            className="mt-0.5 text-[11px] text-emerald-300/70"
+            title="실제로 탈 역과 걷는 시간은 계산 결과에 나와요"
+          >
+            현재 위치 사용 중{status.accuracy ? ` · 오차 약 ${status.accuracy}m` : ''}
           </p>
         </div>
       )}
