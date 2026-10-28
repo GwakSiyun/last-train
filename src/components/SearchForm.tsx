@@ -6,8 +6,9 @@ interface SearchFormProps {
   defaults: { from?: string; to?: string; lat?: string; lng?: string; day?: string; sort?: string };
 }
 
+/** 모바일은 16px — 아이폰 사파리는 입력칸 글자가 16px 미만이면 포커스 때 화면을 확대한다 */
 const fieldClass =
-  'w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none placeholder:text-white/30 focus:border-indigo-400';
+  'w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-base outline-none lg:text-sm placeholder:text-white/30 focus:border-indigo-400';
 
 const STATION_LIST_ID = 'station-list';
 
