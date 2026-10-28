@@ -3,11 +3,12 @@ import PlanResultCard from '@/components/PlanResultCard';
 import SearchForm from '@/components/SearchForm';
 import SearchPanel from '@/components/SearchPanel';
 import { findByStationName } from '@/lib/transit/lines';
-import SortTabs from '@/components/SortTabs';
+import QueryTabs, { type TabOption } from '@/components/QueryTabs';
 import { planAllRoutes, SORT_KEYS, type SortKey } from '@/lib/transit/planner';
 import { getProviders, type TransitProviders } from '@/lib/transit/providers';
-import { DAY_TYPE_LABEL, nowInSeoul, type SeoulNow } from '@/lib/transit/time';
-import type { Place, PlanResult, StationOption } from '@/lib/transit/types';
+import { holidayName, hasHolidayKey } from '@/lib/transit/holidays';
+import { DAY_TYPE_LABEL, nowInSeoul, withHoliday, type SeoulNow } from '@/lib/transit/time';
+import type { DayType, Place, PlanResult, StationOption } from '@/lib/transit/types';
 
 interface SearchParams {
   from?: string;
@@ -15,6 +16,27 @@ interface SearchParams {
   lat?: string;
   lng?: string;
   sort?: string;
+  /** 시간표 요일 직접 선택 (공휴일 등). 없으면 오늘 요일 */
+  day?: string;
+}
+
+const SORT_OPTIONS: readonly TabOption<SortKey>[] = [
+  { value: 'late', label: '늦게 출발순' },
+  { value: 'fast', label: '최단시간순' },
+  { value: 'transfer', label: '최소환승순' },
+];
+
+const DAY_TYPES: readonly DayType[] = ['WEEKDAY', 'SATURDAY', 'HOLIDAY'];
+
+function parseDay(value: string | undefined, today: DayType): DayType {
+  return DAY_TYPES.find((d) => d === value) ?? today;
+}
+
+function dayOptions(today: DayType): TabOption<DayType>[] {
+  return DAY_TYPES.map((d) => ({
+    value: d,
+    label: d === today ? `${DAY_TYPE_LABEL[d]}(오늘)` : d === 'HOLIDAY' ? '휴일·공휴일' : DAY_TYPE_LABEL[d],
+  }));
 }
 
 const CARD_TITLE: Record<SortKey, string> = {
@@ -37,8 +59,13 @@ function Notice({ children, tone = 'plain' }: { children: React.ReactNode; tone?
   return <p className={`rounded-2xl border p-4 text-sm ${cls}`}>{children}</p>;
 }
 
-function footnote(now: SeoulNow): string {
-  return `오늘은 ${DAY_TYPE_LABEL[now.dayType]} 시간표 기준 · 공휴일은 아직 반영하지 않아요 · 서울 시간표가 없는 노선(신분당선 등)은 계산에서 빠져요`;
+function footnote(now: SeoulNow, holidayChecked: boolean): string {
+  const today = now.holidayName
+    ? `오늘은 ${now.holidayName}이라 휴일 시간표로 계산해요`
+    : holidayChecked
+      ? `오늘은 ${DAY_TYPE_LABEL[now.dayType]} 시간표로 계산해요 (공휴일 자동 확인)`
+      : `오늘은 ${DAY_TYPE_LABEL[now.dayType]}로 계산해요 · 공휴일이면 결과 위에서 '휴일·공휴일'을 골라주세요`;
+  return `${today} · 서울 시간표가 없는 노선(신분당선 등)은 계산에서 빠져요`;
 }
 
 function errorText(e: unknown): string {
@@ -77,9 +104,22 @@ async function Result({
   if (!destination) return <Notice>도착역 &quot;{params.to}&quot;을(를) 찾지 못했어요. 목록에서 골라주세요.</Notice>;
 
   const sort = parseSort(params.sort);
+  const dayType = parseDay(params.day, now.dayType);
+  const isToday = dayType === now.dayType;
   const origin = resolveOrigin(params, stations);
   if (typeof origin === 'string') return <Notice>{origin}</Notice>;
   if (origin.name === destination.name) return <Notice>출발역과 도착역이 같아요.</Notice>;
+
+  const dayTabs = (
+    <QueryTabs
+      label="시간표"
+      paramKey="day"
+      options={dayOptions(now.dayType)}
+      current={dayType}
+      defaultValue={now.dayType}
+      params={{ ...params }}
+    />
+  );
 
   let plans: PlanResult[];
   try {
@@ -87,7 +127,7 @@ async function Result({
     plans = await planAllRoutes(
       routes,
       providers.timetable,
-      { dayType: now.dayType, bufferMinutes: BUFFER_MINUTES },
+      { dayType, bufferMinutes: BUFFER_MINUTES },
       sort,
     );
   } catch (e) {
@@ -103,9 +143,25 @@ async function Result({
   const [best, ...rest] = plans;
   return (
     <>
-      {plans.filter((p) => p.ok).length > 1 && <SortTabs current={sort} params={{ ...params }} />}
+      {dayTabs}
+      {plans.filter((p) => p.ok).length > 1 && (
+        <QueryTabs
+          label="정렬"
+          paramKey="sort"
+          options={SORT_OPTIONS}
+          current={sort}
+          defaultValue="late"
+          params={{ ...params }}
+        />
+      )}
       {best.ok ? (
-        <PlanResultCard plan={best} now={now.minutes} bufferMinutes={BUFFER_MINUTES} title={CARD_TITLE[sort]} />
+        <PlanResultCard
+          plan={best}
+          now={isToday ? now.minutes : null}
+          dayLabel={DAY_TYPE_LABEL[dayType]}
+          bufferMinutes={BUFFER_MINUTES}
+          title={CARD_TITLE[sort]}
+        />
       ) : (
         <Notice>막차를 계산할 수 있는 경로가 없어요. (시간표 정보가 없는 노선만 있어요)</Notice>
       )}
@@ -117,7 +173,17 @@ async function Result({
 export default async function Home({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
   const providers = getProviders();
-  const now = nowInSeoul();
+
+  // 공휴일 키가 있으면 오늘이 공휴일인지 확인 → 휴일 시간표. 실패해도 요일 기준으로 계속 (안내 표시)
+  let now = nowInSeoul();
+  let holidayError: string | null = null;
+  if (hasHolidayKey()) {
+    try {
+      now = withHoliday(now, await holidayName(now.serviceDate));
+    } catch (e) {
+      holidayError = errorText(e);
+    }
+  }
 
   let stations: StationOption[] = [];
   let stationsError: string | null = null;
@@ -153,12 +219,18 @@ export default async function Home({ searchParams }: { searchParams: Promise<Sea
         )}
 
         {stationsError && <Notice tone="error">역 목록을 불러오지 못했어요: {stationsError}</Notice>}
+        {holidayError && (
+          <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            공휴일 정보를 불러오지 못해 요일 기준으로 계산해요. 공휴일이면 &apos;휴일·공휴일&apos;을 골라주세요. (
+            {holidayError})
+          </p>
+        )}
 
         <SearchPanel collapsible={searched} origin={originLabel} destination={params.to ?? ''}>
           <SearchForm stations={stations} defaults={params} />
         </SearchPanel>
 
-        <p className="hidden text-xs leading-relaxed text-white/40 lg:block">{footnote(now)}</p>
+        <p className="hidden text-xs leading-relaxed text-white/40 lg:block">{footnote(now, hasHolidayKey() && !holidayError)}</p>
       </aside>
 
       {/* 오른쪽(모바일: 아래) — 결과 */}
@@ -174,7 +246,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Sea
             </p>
           </div>
         )}
-        <p className="text-[11px] leading-relaxed text-white/30 lg:hidden">{footnote(now)}</p>
+        <p className="text-[11px] leading-relaxed text-white/30 lg:hidden">{footnote(now, hasHolidayKey() && !holidayError)}</p>
       </section>
     </main>
   );

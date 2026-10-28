@@ -8,7 +8,10 @@ type OkPlan = Extract<PlanResult, { ok: true }>;
 
 interface PlanResultCardProps {
   plan: OkPlan;
-  now: ServiceMinutes;
+  /** 오늘이 아닌 요일 시간표를 보고 있으면 null — 남은 시간을 계산하지 않는다 */
+  now: ServiceMinutes | null;
+  /** "평일" / "토요일" / "휴일" */
+  dayLabel: string;
   bufferMinutes: number;
   /** 정렬 기준에 맞춘 추천 이유 (예: "가장 빨리 도착하는 경로") */
   title: string;
@@ -23,10 +26,10 @@ export function routeStats(plan: OkPlan): string {
 }
 
 /** 출발 마감 시각 + 구간 타임라인을 한 카드에 */
-export default function PlanResultCard({ plan, now, bufferMinutes, title }: PlanResultCardProps) {
-  const remaining = plan.leaveBy - now;
-  const missed = remaining < 0;
-  const urgent = !missed && remaining <= URGENT_MINUTES;
+export default function PlanResultCard({ plan, now, dayLabel, bufferMinutes, title }: PlanResultCardProps) {
+  const remaining = now === null ? null : plan.leaveBy - now;
+  const missed = remaining !== null && remaining < 0;
+  const urgent = remaining !== null && !missed && remaining <= URGENT_MINUTES;
   const walk = plan.route.walkToFirstStationMinutes;
   const firstStation = plan.legs[0].segment.from.name;
 
@@ -50,13 +53,16 @@ export default function PlanResultCard({ plan, now, bufferMinutes, title }: Plan
             missed ? 'text-rose-200' : urgent ? 'text-amber-200' : 'text-white/70'
           }`}
         >
-          {missed
-            ? `${formatDuration(Math.ceil(-remaining))} 지남`
-            : `${urgent ? '서둘러요! ' : ''}${formatDuration(Math.floor(remaining))} 남음`}
+          {remaining === null
+            ? `${dayLabel} 시간표`
+            : missed
+              ? `${formatDuration(Math.ceil(-remaining))} 지남`
+              : `${urgent ? '서둘러요! ' : ''}${formatDuration(Math.floor(remaining))} 남음`}
         </p>
       </div>
       <p className="px-5 pb-3 text-[11px] text-white/40">
-        {stationLabel(firstStation)}까지 도보 {walk}분 + 여유 {bufferMinutes}분 포함 · 기준 {formatClock(now)}
+        {stationLabel(firstStation)}까지 도보 {walk}분 + 여유 {bufferMinutes}분 포함 ·{' '}
+        {now === null ? `${dayLabel} 기준 (오늘 아님)` : `${dayLabel} · 기준 ${formatClock(now)}`}
       </p>
 
       <div className="border-t border-white/10 bg-black/20 px-4 py-3">
