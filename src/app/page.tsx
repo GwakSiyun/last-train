@@ -1,9 +1,9 @@
-import OtherRoutes from '@/components/OtherRoutes';
-import PlanResultCard from '@/components/PlanResultCard';
+import LiveResult from '@/components/LiveResult';
+import Notice from '@/components/Notice';
+import ResultView, { BUFFER_MINUTES } from '@/components/ResultView';
 import SearchForm from '@/components/SearchForm';
 import SearchPanel from '@/components/SearchPanel';
 import { findByStationName } from '@/lib/transit/lines';
-import QueryTabs, { type TabOption } from '@/components/QueryTabs';
 import { planAllRoutes, SORT_KEYS, type SortKey } from '@/lib/transit/planner';
 import { getProviders, type TransitProviders } from '@/lib/transit/providers';
 import { holidayName, hasHolidayKey } from '@/lib/transit/holidays';
@@ -20,43 +20,14 @@ interface SearchParams {
   day?: string;
 }
 
-const SORT_OPTIONS: readonly TabOption<SortKey>[] = [
-  { value: 'late', label: '늦게 출발순' },
-  { value: 'fast', label: '최단시간순' },
-  { value: 'transfer', label: '최소환승순' },
-];
-
 const DAY_TYPES: readonly DayType[] = ['WEEKDAY', 'SATURDAY', 'HOLIDAY'];
 
 function parseDay(value: string | undefined, today: DayType): DayType {
   return DAY_TYPES.find((d) => d === value) ?? today;
 }
 
-function dayOptions(today: DayType): TabOption<DayType>[] {
-  return DAY_TYPES.map((d) => ({
-    value: d,
-    label: d === today ? `${DAY_TYPE_LABEL[d]}(오늘)` : d === 'HOLIDAY' ? '휴일·공휴일' : DAY_TYPE_LABEL[d],
-  }));
-}
-
-const CARD_TITLE: Record<SortKey, string> = {
-  late: '가장 늦게 출발해도 되는 경로',
-  fast: '가장 빨리 도착하는 경로',
-  transfer: '환승이 가장 적은 경로',
-};
-
 function parseSort(value: string | undefined): SortKey {
   return SORT_KEYS.find((k) => k === value) ?? 'late';
-}
-
-const BUFFER_MINUTES = 3;
-
-function Notice({ children, tone = 'plain' }: { children: React.ReactNode; tone?: 'plain' | 'error' }) {
-  const cls =
-    tone === 'error'
-      ? 'border-rose-400/30 bg-rose-500/10 text-rose-100'
-      : 'border-white/10 bg-white/[0.03] text-white/70';
-  return <p className={`rounded-2xl border p-4 text-sm ${cls}`}>{children}</p>;
 }
 
 function footnote(now: SeoulNow, holidayChecked: boolean): string {
@@ -105,68 +76,49 @@ async function Result({
 
   const sort = parseSort(params.sort);
   const dayType = parseDay(params.day, now.dayType);
-  const isToday = dayType === now.dayType;
+  const nowMinutes = dayType === now.dayType ? now.minutes : null;
   const origin = resolveOrigin(params, stations);
   if (typeof origin === 'string') return <Notice>{origin}</Notice>;
   if (origin.name === destination.name) return <Notice>출발역과 도착역이 같아요.</Notice>;
 
-  const dayTabs = (
-    <QueryTabs
-      label="시간표"
-      paramKey="day"
-      options={dayOptions(now.dayType)}
-      current={dayType}
-      defaultValue={now.dayType}
-      params={{ ...params }}
-    />
-  );
+  const tabParams = { ...params };
+  const to: Place = { name: destination.name, lat: destination.lat, lng: destination.lng };
 
+  // 배포: 브라우저가 ODsay 호출 → 서버 액션이 막차 계산
+  if (providers.routeMode === 'browser') {
+    return (
+      <LiveResult
+        key={JSON.stringify([origin, to, sort, dayType])}
+        origin={{ name: origin.name, lat: origin.lat, lng: origin.lng }}
+        destination={to}
+        sort={sort}
+        dayType={dayType}
+        today={now.dayType}
+        nowMinutes={nowMinutes}
+        params={tabParams}
+      />
+    );
+  }
+
+  // 로컬(Server 키)·샘플: 서버에서 모두 계산
   let plans: PlanResult[];
   try {
     const routes = await providers.routes.findRoutes(origin, destination);
-    plans = await planAllRoutes(
-      routes,
-      providers.timetable,
-      { dayType, bufferMinutes: BUFFER_MINUTES },
-      sort,
-    );
+    plans = await planAllRoutes(routes, providers.timetable, { dayType, bufferMinutes: BUFFER_MINUTES }, sort);
   } catch (e) {
     return <Notice tone="error">경로·시간표를 불러오지 못했어요: {errorText(e)}</Notice>;
   }
 
-  if (plans.length === 0) {
-    return (
-      <Notice>{providers.isMock ? '이 구간은 샘플 데이터에 경로가 없어요.' : '지하철 경로를 찾지 못했어요.'}</Notice>
-    );
-  }
-
-  const [best, ...rest] = plans;
   return (
-    <>
-      {dayTabs}
-      {plans.filter((p) => p.ok).length > 1 && (
-        <QueryTabs
-          label="정렬"
-          paramKey="sort"
-          options={SORT_OPTIONS}
-          current={sort}
-          defaultValue="late"
-          params={{ ...params }}
-        />
-      )}
-      {best.ok ? (
-        <PlanResultCard
-          plan={best}
-          now={isToday ? now.minutes : null}
-          dayLabel={DAY_TYPE_LABEL[dayType]}
-          bufferMinutes={BUFFER_MINUTES}
-          title={CARD_TITLE[sort]}
-        />
-      ) : (
-        <Notice>막차를 계산할 수 있는 경로가 없어요. (시간표 정보가 없는 노선만 있어요)</Notice>
-      )}
-      <OtherRoutes plans={best.ok ? rest : plans} />
-    </>
+    <ResultView
+      plans={plans}
+      sort={sort}
+      dayType={dayType}
+      today={now.dayType}
+      nowMinutes={nowMinutes}
+      params={tabParams}
+      emptyMessage={providers.isMock ? '이 구간은 샘플 데이터에 경로가 없어요.' : '지하철 경로를 찾지 못했어요.'}
+    />
   );
 }
 
