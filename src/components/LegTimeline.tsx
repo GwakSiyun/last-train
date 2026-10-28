@@ -24,10 +24,13 @@ export default function LegTimeline({ plan }: LegTimelineProps) {
           >
             <LineBadge line={leg.segment.line} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">
-                {leg.segment.from.name} → {leg.segment.to.name}
+              {/* 역 이름이 길면 이름만 잘리고 막차 배지는 항상 보이게 */}
+              <p className="flex items-center gap-1.5 text-sm font-medium">
+                <span className="truncate">
+                  {leg.segment.from.name} → {leg.segment.to.name}
+                </span>
                 {leg.isLastTrain && (
-                  <span className="ml-1.5 rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] text-rose-200">
+                  <span className="shrink-0 rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] text-rose-200">
                     막차
                   </span>
                 )}
