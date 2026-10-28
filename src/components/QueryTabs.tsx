@@ -35,7 +35,8 @@ export default function QueryTabs<T extends string>({
 
   return (
     <nav aria-label={label} className="flex items-center gap-2">
-      {label && <span className="shrink-0 text-[11px] text-white/40">{label}</span>}
+      {/* 라벨 폭 고정 — "시간표"/"정렬"처럼 글자 수가 달라도 탭 시작선이 맞도록 */}
+      {label && <span className="w-9 shrink-0 text-[11px] text-white/40">{label}</span>}
       <div
         className="grid flex-1 gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1 text-sm"
         style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
