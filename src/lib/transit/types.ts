@@ -57,7 +57,9 @@ export type TrainResult =
   | { status: 'OK'; departAt: ServiceMinutes; arriveAt: ServiceMinutes }
   | { status: 'NO_TRAIN' }
   /** 시간표 데이터가 없는 노선·역 (예: 신분당선) */
-  | { status: 'UNSUPPORTED' };
+  | { status: 'UNSUPPORTED' }
+  /** 원래 시간표가 있는 노선(1~9호선)인데 서울 API가 빈 값을 줌 — 일시 장애 */
+  | { status: 'UNAVAILABLE' };
 
 export interface TimetableProvider {
   latestTrain(query: TrainQuery): Promise<TrainResult>;
@@ -82,4 +84,4 @@ export type PlanResult =
       leaveBy: ServiceMinutes;
       arriveAt: ServiceMinutes;
     }
-  | { ok: false; route: Route; reason: 'NO_TRAIN' | 'UNSUPPORTED'; segment: Segment };
+  | { ok: false; route: Route; reason: Exclude<TrainResult['status'], 'OK'>; segment: Segment };
