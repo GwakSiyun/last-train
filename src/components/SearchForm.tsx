@@ -27,18 +27,6 @@ export default function SearchForm({ stations, defaults }: SearchFormProps) {
         ))}
       </datalist>
 
-      <label className="grid gap-1 text-xs text-white/60">
-        도착역
-        <input
-          name="to"
-          list={STATION_LIST_ID}
-          defaultValue={defaults.to}
-          required
-          autoComplete="off"
-          placeholder="예: 광화문"
-          className={fieldClass}
-        />
-      </label>
 
       <LocationField
         stations={stations.map(({ name, lat, lng, lines }) => ({ name, lat, lng, lines }))}
@@ -56,6 +44,19 @@ export default function SearchForm({ stations, defaults }: SearchFormProps) {
           defaultValue={defaults.from}
           autoComplete="off"
           placeholder="예: 강남"
+          className={fieldClass}
+        />
+      </label>
+
+      <label className="grid gap-1 text-xs text-white/60">
+        도착역
+        <input
+          name="to"
+          list={STATION_LIST_ID}
+          defaultValue={defaults.to}
+          required
+          autoComplete="off"
+          placeholder="예: 광화문"
           className={fieldClass}
         />
       </label>
