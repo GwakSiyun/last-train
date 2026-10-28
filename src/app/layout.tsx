@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,8 +14,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "막차 계산기",
-  description: "환승 포함, 지금 몇 시까지 나가야 막차를 탈 수 있는지 알려드려요.",
+  metadataBase: new URL(SITE_URL),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: ["막차 계산기", "지하철 막차", "막차 시간", "환승 막차", "서울 지하철 막차", "막차 출발 시간"],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "ko_KR",
+    url: "/",
+    siteName: SITE_NAME,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: { card: "summary_large_image", title: SITE_TITLE, description: SITE_DESCRIPTION },
+  // 네이버 서치어드바이저 소유 확인
+  verification: { other: { "naver-site-verification": "2c6e639269eed910790167e05b629fc091e91207" } },
 };
 
 export default function RootLayout({

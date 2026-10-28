@@ -200,6 +200,21 @@ export default async function Home({ searchParams }: { searchParams: Promise<Sea
         )}
         <p className="text-[11px] leading-relaxed text-white/30 lg:hidden">{footnote(now, hasHolidayKey() && !holidayError)}</p>
       </section>
+
+      {/* 서비스 소개 — 검색엔진이 무슨 사이트인지 파악하도록 (화면에선 작게) */}
+      <footer className="grid gap-1.5 border-t border-white/5 pt-4 text-[11px] leading-relaxed text-white/35 lg:col-span-2">
+        <h2 className="text-xs font-semibold text-white/50">막차 계산기는 이렇게 계산해요</h2>
+        <p>
+          도착역을 입력하고 현재 위치(또는 출발역)를 고르면, 갈 수 있는 지하철 경로마다 마지막 구간의 막차에서
+          거꾸로 계산해 환승역 막차까지 탈 수 있는 가장 늦은 출발 시각을 알려드려요. 역까지 걷는 시간과 환승 도보
+          시간, 여유 3분을 포함해요.
+        </p>
+        <p>
+          서울 열린데이터광장의 역별 열차 시간표(1~9호선 등)와 공휴일 정보를 사용하고, 평일·토요일·휴일 시간표를
+          구분해요. 중간에 끊기는 막차(예: 일부 구간까지만 가는 열차)는 제외해요. 실제 운행은 지연·임시 변경이 있을 수
+          있으니 여유 있게 출발하세요.
+        </p>
+      </footer>
     </main>
   );
 }
