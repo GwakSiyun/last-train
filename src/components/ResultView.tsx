@@ -80,7 +80,11 @@ export default function ResultView({ plans, sort, dayType, today, nowMinutes, pa
           title={CARD_TITLE[sort]}
         />
       ) : (
-        <Notice>막차를 계산할 수 있는 경로가 없어요. (시간표 정보가 없는 노선만 있어요)</Notice>
+        <Notice>
+          {plans.some((p) => !p.ok && p.reason === 'UNAVAILABLE')
+            ? '서울시 지하철 시간표를 지금 불러오지 못했어요. 서울 열린데이터 쪽 일시적인 문제라 잠시 후 다시 시도해주세요.'
+            : '막차를 계산할 수 있는 경로가 없어요. (시간표 정보가 없는 노선만 있어요)'}
+        </Notice>
       )}
       <OtherRoutes plans={best.ok ? rest : plans} />
     </>

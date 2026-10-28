@@ -13,13 +13,25 @@ interface Entry<T> {
 const store = new Map<string, Entry<unknown>>();
 const MAX_ENTRIES = 500;
 
-export function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+/** keep이 false를 돌려주는 결과(예: 빈 응답)는 오류처럼 저장하지 않는다 */
+export function cached<T>(
+  key: string,
+  ttlMs: number,
+  load: () => Promise<T>,
+  keep: (value: T) => boolean = () => true,
+): Promise<T> {
   const hit = store.get(key) as Entry<T> | undefined;
   if (hit && hit.expiresAt > Date.now()) return hit.value;
 
   const value = load();
-  store.set(key, { expiresAt: Date.now() + ttlMs, value });
-  value.catch(() => store.delete(key));
+  const entry: Entry<T> = { expiresAt: Date.now() + ttlMs, value };
+  store.set(key, entry);
+  const drop = (): void => {
+    if (store.get(key) === entry) store.delete(key);
+  };
+  value.then((v) => {
+    if (!keep(v)) drop();
+  }, drop);
 
   if (store.size > MAX_ENTRIES) {
     const oldest = store.keys().next().value;

@@ -18,6 +18,7 @@ import type {
  * - SearchSTNTimeTableByIDService: STATION_CD·요일·상하행 → 열차별 시각 (자정 이후는 "24:38:00")
  * - subwayStationMaster: 역 좌표
  * ⚠️ 신분당선·수인분당선 등은 시간표가 비어 있음 → UNSUPPORTED 처리.
+ * ⚠️ 1~9호선도 일시적으로 전부 빈 값(INFO-200)을 줄 때가 있음 (2026-10-28 16시경 3~9호선 확인) → UNAVAILABLE.
  */
 
 const BASE = 'http://openapi.seoul.go.kr:8088';
@@ -68,7 +69,8 @@ const NO_DATA = 'INFO-200';
 function fetchRows<T>(service: string, ...params: string[]): Promise<T[]> {
   const path = [service, '1', '1000', ...params].map(encodeURIComponent).join('/');
 
-  return cached(`seoul:${path}`, ONE_DAY_MS, async () => {
+  // 빈 결과는 저장하지 않는다 — 서울 API가 일시적으로 비었다가 복구돼도 바로 반영되게
+  return cached(`seoul:${path}`, ONE_DAY_MS, async (): Promise<T[]> => {
     const res = await fetch(`${BASE}/${apiKey()}/json/${path}/`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`서울 API ${service} HTTP ${res.status}`);
 
@@ -84,7 +86,12 @@ function fetchRows<T>(service: string, ...params: string[]): Promise<T[]> {
     const result = body.RESULT as SeoulResult | undefined;
     if (result?.CODE === NO_DATA) return [];
     throw new Error(`서울 API ${service}: ${result?.MESSAGE ?? '알 수 없는 응답'}`);
-  });
+  }, (rows) => rows.length > 0);
+}
+
+/** 평소 시간표가 있는 노선 — 이 노선이 비어 있으면 '지원 안 함'이 아니라 일시 장애 */
+function hasTimetableNormally(line: string): boolean {
+  return /^0[1-9]호선$/.test(lineKey(line));
 }
 
 /** "24:38:30" → 1478.5 / "00:00:00"(시각 없음) → null */
@@ -125,17 +132,18 @@ async function stationTimes(
  * 타는 역·내리는 역 시간표를 열차번호로 조인 → 실제로 내릴 역까지 가는 열차만 남는다.
  * (예: 압구정까지만 가는 막차는 종로3가 시간표에 없어서 자동 제외)
  */
-async function trainsBetween(query: TrainQuery): Promise<Train[] | null> {
+async function trainsBetween(query: TrainQuery): Promise<Train[] | 'NO_STATION' | 'EMPTY_TIMETABLE'> {
   const index = await stationCodeIndex();
   const key = lineKey(query.segment.line);
   const fromCd = index.get(`${key}|${stationKey(query.segment.from.name)}`);
   const toCd = index.get(`${key}|${stationKey(query.segment.to.name)}`);
-  if (!fromCd || !toCd) return null;
+  if (!fromCd || !toCd) return 'NO_STATION';
 
   const [departs, arrives] = await Promise.all([
     stationTimes(fromCd, query.dayType, 'depart'),
     stationTimes(toCd, query.dayType, 'arrive'),
   ]);
+  if (departs.size === 0 || arrives.size === 0) return 'EMPTY_TIMETABLE';
 
   // 반대 방향·순환선 반대로 도는 열차 제외
   const maxRide = query.segment.rideMinutes * 2 + 10;
@@ -155,8 +163,11 @@ async function trainsBetween(query: TrainQuery): Promise<Train[] | null> {
 export const seoulTimetableProvider: TimetableProvider = {
   async latestTrain(query: TrainQuery): Promise<TrainResult> {
     const trains = await trainsBetween(query);
-    // 역 매칭 실패(null) 또는 시간표 자체가 없는 노선([])
-    if (trains === null || trains.length === 0) return { status: 'UNSUPPORTED' };
+    if (trains === 'EMPTY_TIMETABLE' && hasTimetableNormally(query.segment.line)) {
+      return { status: 'UNAVAILABLE' };
+    }
+    // 역 매칭 실패·시간표 자체가 없는 노선·같이 서는 열차 없음
+    if (typeof trains === 'string' || trains.length === 0) return { status: 'UNSUPPORTED' };
 
     const { arriveBy } = query;
     const candidates = arriveBy === undefined ? trains : trains.filter((t) => t.arriveAt <= arriveBy);

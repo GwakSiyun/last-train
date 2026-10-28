@@ -5,6 +5,14 @@ import { stationLabel } from '@/lib/transit/lines';
 import { formatClock } from '@/lib/transit/time';
 import type { PlanResult } from '@/lib/transit/types';
 
+type FailureReason = Extract<PlanResult, { ok: false }>['reason'];
+
+const FAILURE_TEXT: Record<FailureReason, (line: string) => string> = {
+  UNSUPPORTED: (line) => `${line} 시간표 정보 없음`,
+  UNAVAILABLE: (line) => `${line} 시간표 일시 오류`,
+  NO_TRAIN: (line) => `${line} 탈 수 있는 열차 없음`,
+};
+
 interface OtherRoutesProps {
   plans: PlanResult[];
 }
@@ -28,9 +36,7 @@ export default function OtherRoutes({ plans }: OtherRoutesProps) {
               <li key={i} className="flex items-center justify-between gap-3 px-1 py-1.5">
                 <RouteLines lines={lines} />
                 <span className="shrink-0 text-xs text-white/40">
-                  {plan.reason === 'UNSUPPORTED'
-                    ? `${plan.segment.line} 시간표 정보 없음`
-                    : `${plan.segment.line} 탈 수 있는 열차 없음`}
+                  {FAILURE_TEXT[plan.reason](plan.segment.line)}
                 </span>
               </li>
             );
