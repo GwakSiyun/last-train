@@ -5,40 +5,46 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
 export interface SeoulNow {
   minutes: ServiceMinutes;
+  /** 요일 기준 (공휴일은 withHoliday로 덮어쓴다) */
   dayType: DayType;
+  /** 운행일 날짜 "YYYYMMDD" — 새벽 1시면 전날 */
+  serviceDate: string;
+  /** 오늘이 공휴일이면 이름 (예: "개천절") */
+  holidayName?: string;
+}
+
+function seoulParts(date: Date, options: Intl.DateTimeFormatOptions): Record<string, string> {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Seoul', ...options }).formatToParts(date);
+  return Object.fromEntries(parts.map((p) => [p.type, p.value]));
 }
 
 /**
  * 서울 기준 현재 운행일 시각.
  * 00:00~03:59는 전날 운행일의 24:00~27:59로 본다.
- * ⚠️ 공휴일은 판별하지 않음 — 평일 공휴일도 WEEKDAY로 계산된다.
+ * 공휴일은 여기서 판별하지 않는다 (withHoliday 참고).
  */
 export function nowInSeoul(date: Date = new Date()): SeoulNow {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Seoul',
-    hour: '2-digit',
-    minute: '2-digit',
+  const clock = seoulParts(date, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const hour = Number(clock.hour);
+  let minutes = hour * 60 + Number(clock.minute);
+  if (hour < SERVICE_DAY_START_HOUR) minutes += 24 * 60;
+
+  // 운행일 = 4시간 전 시각의 날짜·요일
+  const serviceDay = seoulParts(new Date(date.getTime() - SERVICE_DAY_START_HOUR * 60 * 60 * 1000), {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     weekday: 'short',
-    hourCycle: 'h23',
-  }).formatToParts(date);
+  });
+  const weekdayIndex = WEEKDAYS.indexOf(serviceDay.weekday as (typeof WEEKDAYS)[number]);
+  const dayType: DayType = weekdayIndex === 0 ? 'HOLIDAY' : weekdayIndex === 6 ? 'SATURDAY' : 'WEEKDAY';
 
-  const get = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((p) => p.type === type)?.value ?? '';
+  return { minutes, dayType, serviceDate: `${serviceDay.year}${serviceDay.month}${serviceDay.day}` };
+}
 
-  const hour = Number(get('hour'));
-  const minute = Number(get('minute'));
-  let weekdayIndex = WEEKDAYS.indexOf(get('weekday') as (typeof WEEKDAYS)[number]);
-
-  let minutes = hour * 60 + minute;
-  if (hour < SERVICE_DAY_START_HOUR) {
-    minutes += 24 * 60;
-    weekdayIndex = (weekdayIndex + 6) % 7;
-  }
-
-  const dayType: DayType =
-    weekdayIndex === 0 ? 'HOLIDAY' : weekdayIndex === 6 ? 'SATURDAY' : 'WEEKDAY';
-
-  return { minutes, dayType };
+/** 공휴일이면 휴일 시간표로 */
+export function withHoliday(now: SeoulNow, holidayName: string | null): SeoulNow {
+  return holidayName ? { ...now, dayType: 'HOLIDAY', holidayName } : now;
 }
 
 /** 1470 → "00:30" */

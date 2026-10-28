@@ -3,7 +3,7 @@ import type { StationOption } from '@/lib/transit/types';
 
 interface SearchFormProps {
   stations: StationOption[];
-  defaults: { from?: string; to?: string; lat?: string; lng?: string };
+  defaults: { from?: string; to?: string; lat?: string; lng?: string; day?: string; sort?: string };
 }
 
 const fieldClass =
@@ -15,6 +15,9 @@ const STATION_LIST_ID = 'station-list';
 export default function SearchForm({ stations, defaults }: SearchFormProps) {
   return (
     <form method="GET" className="grid gap-2.5 rounded-2xl border border-white/10 bg-white/[0.03] p-3.5">
+      {/* 다시 검색해도 고른 시간표 요일·정렬 유지 */}
+      {defaults.day && <input type="hidden" name="day" value={defaults.day} />}
+      {defaults.sort && <input type="hidden" name="sort" value={defaults.sort} />}
       <datalist id={STATION_LIST_ID}>
         {/* 텍스트 = 자동완성 목록에 보이는 보조 설명 (예: "2호선 · 신분당선") */}
         {stations.map((s) => (
