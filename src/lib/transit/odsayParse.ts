@@ -31,16 +31,41 @@ export interface OdsayResponse {
   error?: unknown;
 }
 
+/** message는 화면에 그대로 보여줄 수 있는 문장 */
 export class OdsayError extends Error {}
 
-function errorMessage(error: unknown): string {
+/**
+ * 길찾기 API 문서(lab.odsay.com/guide)에 있는 오류 코드 → 안내 문구.
+ * ⚠️ 하루 호출 한도(Basic 30회) 초과 응답은 문서에 없고, 실제로 넘겨 확인하면 그날 사이트가 멈춰서 미확인.
+ *    그래서 문서에 없는 오류는 '사용량 초과일 수 있음'으로 안내하고 원래 메시지를 같이 보여준다.
+ */
+const KNOWN_ERRORS: Record<string, string> = {
+  '-98': '출발지와 도착지가 700m 안이에요. 걸어가도 되는 거리예요 🚶',
+  '-99': '지하철 경로를 찾지 못했어요.',
+  '3': '출발지 근처에서 지하철역을 찾지 못했어요.',
+  '4': '도착지 근처에서 지하철역을 찾지 못했어요.',
+  '5': '출발지·도착지 근처에서 지하철역을 찾지 못했어요.',
+  '6': '서비스 지역이 아니에요. (수도권 지하철만 지원해요)',
+  '500': '경로 검색 서버(ODsay)에 오류가 있어요. 잠시 후 다시 시도해주세요.',
+};
+
+export const QUOTA_MESSAGE = '오늘 검색이 많아서 무료 경로 검색 사용량을 다 썼을 수 있어요. 내일 다시 써주세요 🙏';
+
+function errorField(error: unknown, field: 'code' | 'message' | 'msg'): string | undefined {
   const first = Array.isArray(error) ? error[0] : error;
-  if (first && typeof first === 'object') {
-    const { message, msg } = first as { message?: unknown; msg?: unknown };
-    if (typeof message === 'string') return message;
-    if (typeof msg === 'string') return msg;
-  }
-  return 'ODsay 경로 검색에 실패했어요.';
+  if (!first || typeof first !== 'object') return undefined;
+  const value = (first as Record<string, unknown>)[field];
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  const code = errorField(error, 'code');
+  const known = code === undefined ? undefined : KNOWN_ERRORS[code];
+  if (known) return known;
+  const raw = errorField(error, 'message') ?? errorField(error, 'msg') ?? '알 수 없는 오류';
+  // 키·도메인 등록 문제 (2026-10-28 실제로 겪은 응답) — 사용량 문제가 아니라 운영자 쪽 설정 문제
+  if (raw.includes('ApiKeyAuthFailed')) return `경로 검색 인증에 실패했어요. 운영자가 확인 중이에요 🙏 (ODsay: ${raw})`;
+  return `${QUOTA_MESSAGE} (ODsay: ${raw})`;
 }
 
 /**

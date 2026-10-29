@@ -24,9 +24,9 @@ export default function LegTimeline({ plan }: LegTimelineProps) {
           >
             <LineBadge line={leg.segment.line} />
             <div className="min-w-0 flex-1">
-              {/* 역 이름이 길면 이름만 잘리고 막차 배지는 항상 보이게 */}
-              <p className="flex items-center gap-1.5 text-sm font-medium">
-                <span className="truncate">
+              {/* 역 이름이 길면 줄바꿈 (잘리면 도착역이 안 보임) — 막차 배지는 항상 보이게 */}
+              <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-medium">
+                <span className="break-keep">
                   {leg.segment.from.name} → {leg.segment.to.name}
                 </span>
                 {leg.isLastTrain && (

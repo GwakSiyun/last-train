@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { cached, ONE_DAY_MS } from './cache';
-import { ODSAY_ENDPOINT, OdsayError, odsayCacheKey, odsayQuery, parseOdsayRoutes, type OdsayResponse } from './odsayParse';
+import { ODSAY_ENDPOINT, OdsayError, QUOTA_MESSAGE, odsayCacheKey, odsayQuery, parseOdsayRoutes, type OdsayResponse } from './odsayParse';
 import type { Place, Route, RouteProvider } from './types';
 
 /**
@@ -17,7 +17,7 @@ export const odsayRouteProvider: RouteProvider = {
     return cached(odsayCacheKey(query), ONE_DAY_MS, async () => {
       query.set('apiKey', key);
       const res = await fetch(`${ODSAY_ENDPOINT}?${query}`, { cache: 'no-store' });
-      if (!res.ok) throw new OdsayError(`ODsay HTTP ${res.status}`);
+      if (!res.ok) throw new OdsayError(`${QUOTA_MESSAGE} (ODsay HTTP ${res.status})`);
       return parseOdsayRoutes((await res.json()) as OdsayResponse);
     });
   },
