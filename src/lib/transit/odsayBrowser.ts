@@ -3,7 +3,7 @@
  * Vercel은 서버 IP가 바뀌어 Server 키를 못 쓰기 때문에 배포 환경은 이 경로를 쓴다.
  * ⚠️ 키가 브라우저에 노출된다 (도메인 제한 키라 의도된 방식). 같은 검색은 sessionStorage에 저장해 호출 수를 아낀다.
  */
-import { ODSAY_ENDPOINT, OdsayError, odsayCacheKey, odsayQuery, parseOdsayRoutes, type OdsayResponse } from './odsayParse';
+import { ODSAY_ENDPOINT, OdsayError, QUOTA_MESSAGE, odsayCacheKey, odsayQuery, parseOdsayRoutes, type OdsayResponse } from './odsayParse';
 import type { Place, Route } from './types';
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
@@ -47,7 +47,7 @@ export async function fetchRoutesInBrowser(origin: Place, destination: Place): P
 
   query.set('apiKey', key);
   const res = await fetch(`${ODSAY_ENDPOINT}?${query}`);
-  if (!res.ok) throw new OdsayError(`ODsay HTTP ${res.status}`);
+  if (!res.ok) throw new OdsayError(`${QUOTA_MESSAGE} (ODsay HTTP ${res.status})`);
 
   const routes = parseOdsayRoutes((await res.json()) as OdsayResponse);
   writeCache(cacheKey, routes);

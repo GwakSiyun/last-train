@@ -6,6 +6,7 @@ import Notice from './Notice';
 import ResultView, { BUFFER_MINUTES, DayTabs } from './ResultView';
 import { planRoutesAction } from '@/app/actions';
 import { fetchRoutesInBrowser } from '@/lib/transit/odsayBrowser';
+import { OdsayError } from '@/lib/transit/odsayParse';
 import type { SortKey } from '@/lib/transit/planner';
 import type { DayType, Place, PlanResult, ServiceMinutes } from '@/lib/transit/types';
 
@@ -17,6 +18,10 @@ interface LiveResultProps {
   today: DayType;
   nowMinutes: ServiceMinutes | null;
   params: Record<string, string | undefined>;
+}
+
+function failText(detail: string): string {
+  return `경로·시간표를 불러오지 못했어요: ${detail}`;
 }
 
 type State = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'done'; plans: PlanResult[] };
@@ -38,9 +43,13 @@ export default function LiveResult({ origin, destination, sort, dayType, today, 
       try {
         const routes = await fetchRoutesInBrowser(q.origin, q.destination);
         const result = await planRoutesAction(routes, q.dayType, q.sort, BUFFER_MINUTES);
-        if (!cancelled) setState(result.ok ? { kind: 'done', plans: result.plans } : { kind: 'error', message: result.message });
+        if (!cancelled) {
+          setState(result.ok ? { kind: 'done', plans: result.plans } : { kind: 'error', message: failText(result.message) });
+        }
       } catch (e) {
-        if (!cancelled) setState({ kind: 'error', message: e instanceof Error ? e.message : '알 수 없는 오류가 발생했어요.' });
+        // ODsay 오류는 이미 안내 문장으로 만들어져 있다
+        const message = e instanceof OdsayError ? e.message : failText(e instanceof Error ? e.message : '알 수 없는 오류');
+        if (!cancelled) setState({ kind: 'error', message });
       }
     })();
     return () => {
@@ -58,7 +67,7 @@ export default function LiveResult({ origin, destination, sort, dayType, today, 
       </>
     );
   }
-  if (state.kind === 'error') return <Notice tone="error">경로·시간표를 불러오지 못했어요: {state.message}</Notice>;
+  if (state.kind === 'error') return <Notice tone="error">{state.message}</Notice>;
 
   return (
     <ResultView
