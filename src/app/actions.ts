@@ -18,6 +18,8 @@ export type PlanActionResult = { ok: true; plans: PlanResult[] } | { ok: false; 
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const isText = (v: unknown, max = 40): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
+/** 빠른 환승 위치·출구 번호 — 없거나 이상하면 버린다(경로 자체는 유효) */
+const optionalShort = (v: unknown): string | undefined => (isText(v, 12) ? v : undefined);
 const isMinutes = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 300;
 
 function toSegment(v: unknown): Segment | null {
@@ -25,7 +27,16 @@ function toSegment(v: unknown): Segment | null {
   const { line, direction, rideMinutes } = v;
   if (!isText(line) || typeof direction !== 'string' || direction.length > 60 || !isMinutes(rideMinutes)) return null;
   if (!isText(v.from.name) || !isText(v.to.name)) return null;
-  return { line, direction, rideMinutes, from: { name: v.from.name }, to: { name: v.to.name } };
+  return {
+    line,
+    direction,
+    rideMinutes,
+    from: { name: v.from.name },
+    to: { name: v.to.name },
+    door: optionalShort(v.door),
+    startExitNo: optionalShort(v.startExitNo),
+    endExitNo: optionalShort(v.endExitNo),
+  };
 }
 
 function toRoute(v: unknown): Route | null {

@@ -32,6 +32,12 @@ export interface Segment {
   to: SegmentStation;
   /** 경로 API가 준 예상 소요시간 — 시간표 조회 시 이상치 필터에 사용 */
   rideMinutes: number;
+  /** 빠른 환승 위치 (예: "3-2" = 3번째 칸 2번 문). ODsay가 안 주면 없음 */
+  door?: string;
+  /** 지하철로 들어가는 출구 번호 (첫 구간, ODsay가 줄 때만) */
+  startExitNo?: string;
+  /** 지하철에서 나가는 출구 번호 (마지막 구간, ODsay가 줄 때만) */
+  endExitNo?: string;
 }
 
 export interface Route {
