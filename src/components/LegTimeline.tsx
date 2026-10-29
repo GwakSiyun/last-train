@@ -30,7 +30,7 @@ export default function LegTimeline({ plan }: LegTimelineProps) {
         const isLast = i === plan.legs.length - 1;
         const slack = i > 0 ? transferSlack(plan, i) : null;
         const tight = slack !== null && slack <= TIGHT_TRANSFER_MINUTES;
-        const { door, startExitNo, endExitNo } = leg.segment;
+        const { door } = leg.segment;
         return (
           <li key={`${i}-${leg.segment.line}-${leg.segment.from.name}`} className="grid gap-1.5">
             {slack !== null && (
@@ -58,11 +58,9 @@ export default function LegTimeline({ plan }: LegTimelineProps) {
                 </p>
                 {leg.segment.direction && <p className="truncate text-[11px] text-white/40">{leg.segment.direction}</p>}
                 {/* 빠른 환승 위치는 다음 환승이 있는 구간에만 (마지막 구간 값의 의미는 문서에 없음) */}
-                {((door && !isLast) || (i === 0 && startExitNo) || (isLast && endExitNo)) && (
+                {door && !isLast && (
                   <p className="mt-1 flex flex-wrap gap-1">
-                    {i === 0 && startExitNo && <Chip>{startExitNo}번 출구로 들어가기</Chip>}
-                    {door && !isLast && <Chip tone="accent">빠른 환승 {door}</Chip>}
-                    {isLast && endExitNo && <Chip>{endExitNo}번 출구로 나가기</Chip>}
+                    <Chip tone="accent">빠른 환승 {door}</Chip>
                   </p>
                 )}
               </div>

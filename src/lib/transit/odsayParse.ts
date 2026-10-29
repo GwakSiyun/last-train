@@ -19,8 +19,6 @@ interface OdsaySubPath {
   lane?: { name: string }[];
   way?: string;
   door?: string;
-  startExitNo?: string;
-  endExitNo?: string;
   startName?: string;
   endName?: string;
 }
@@ -95,7 +93,9 @@ export function odsayCacheKey(query: URLSearchParams): string {
 
 /**
  * 값이 없으면 태그가 빠지거나 문자열 "null"로 온다 → 둘 다 없음 처리.
- * 2026-10-29 실응답(홍대입구→노원): 2호선 door "9-1", 마지막 4호선 door "null"·endExitNo "3", startExitNo 없음.
+ * 2026-10-29 실응답(홍대입구→노원): 2호선 door "9-1", 마지막 4호선 door "null".
+ * ⚠️ startExitNo/endExitNo(출구 번호)는 일부러 안 쓴다: 목적지가 '역 대표 좌표'라 그 점에서 가까운 출구일 뿐
+ *    사용자의 실제 목적지와 무관하다 (좌표 반올림만 달라도 3번↔2번으로 바뀜). 장소 검색이 생기면 다시 검토.
  */
 function optionalText(value: unknown): string | undefined {
   if (typeof value !== 'string' && typeof value !== 'number') return undefined;
@@ -127,8 +127,6 @@ function toRoute(path: OdsayPath): Route | null {
       to: { name: sub.endName ?? '' },
       rideMinutes: sub.sectionTime,
       door: optionalText(sub.door),
-      startExitNo: optionalText(sub.startExitNo),
-      endExitNo: optionalText(sub.endExitNo),
     });
   }
 
