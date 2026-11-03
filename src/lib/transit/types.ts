@@ -63,8 +63,35 @@ export type TrainResult =
   /** 원래 시간표가 있는 노선(1~9호선)인데 서울 API가 빈 값을 줌 — 일시 장애 */
   | { status: 'UNAVAILABLE' };
 
+export interface PartialTrainQuery {
+  segment: Segment;
+  dayType: DayType;
+  /** 내릴 역까지 가는 막차의 출발 시각 — 이보다 늦게 출발하는 열차만 찾는다 */
+  after: ServiceMinutes;
+}
+
+/** 내릴 역 전에 운행이 끝나는 열차 (예: 노원행 막차를 놓쳐도 타는 한성대입구행) */
+export interface PartialTrain {
+  departAt: ServiceMinutes;
+  /** 종착역 도착 */
+  arriveAt: ServiceMinutes;
+  /** 종착역 이름 */
+  terminal: string;
+}
+
 export interface TimetableProvider {
   latestTrain(query: TrainQuery): Promise<TrainResult>;
+  /** 종착역 정보가 없는 시간표(샘플 등)는 구현하지 않는다 */
+  latestPartialTrain?(query: PartialTrainQuery): Promise<PartialTrain | null>;
+}
+
+/** 마지막 구간을 '중간에 끊기는 열차'로 바꿔 탄 계획 — 마지막 leg의 도착역이 종착역 */
+export interface PartialPlan {
+  legs: PlannedLeg[];
+  leaveBy: ServiceMinutes;
+  terminal: string;
+  /** 마지막 구간 열차의 종착역 도착 시각 */
+  terminalArriveAt: ServiceMinutes;
 }
 
 export interface PlannedLeg {
@@ -85,5 +112,7 @@ export type PlanResult =
       /** 현재 위치에서 출발해야 하는 시각 (도보·여유 포함) */
       leaveBy: ServiceMinutes;
       arriveAt: ServiceMinutes;
+      /** 막차를 놓쳐도 마지막 구간 중간역까지는 가는 대안 (더 늦게 나가도 될 때만) */
+      partial?: PartialPlan;
     }
   | { ok: false; route: Route; reason: Exclude<TrainResult['status'], 'OK'>; segment: Segment };
