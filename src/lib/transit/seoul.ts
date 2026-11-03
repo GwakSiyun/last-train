@@ -5,6 +5,8 @@ import { uniqueLines } from './lineColors';
 import { lineKey, stationKey } from './lines';
 import type {
   DayType,
+  PartialTrain,
+  PartialTrainQuery,
   ServiceMinutes,
   StationOption,
   TimetableProvider,
@@ -45,9 +47,15 @@ interface TimetableRow {
   TRAIN_NO: string;
   ARRIVETIME: string;
   LEFTTIME: string;
+  /** 1·2 = 상·하행(내·외선) */
+  INOUT_TAG: string;
+  /** 이 열차의 종착역 STATION_CD / 이름 (2026-11-03 실응답 확인: 4704 → 0419 한성대입구) */
+  DESTSTATION: string;
+  SUBWAYENAME: string;
 }
 
 interface Train {
+  trainNo: string;
   departAt: ServiceMinutes;
   arriveAt: ServiceMinutes;
 }
@@ -108,24 +116,50 @@ async function stationCodeIndex(): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [`${lineKey(r.LINE_NUM)}|${stationKey(r.STATION_NM)}`, r.STATION_CD]));
 }
 
-async function stationTimes(
-  stationCd: string,
-  dayType: DayType,
-  pick: 'depart' | 'arrive',
-): Promise<Map<string, ServiceMinutes>> {
+async function stationRows(stationCd: string, dayType: DayType): Promise<TimetableRow[]> {
   const tables = await Promise.all(
     INOUT_TAGS.map((inout) =>
       fetchRows<TimetableRow>('SearchSTNTimeTableByIDService', stationCd, WEEK_TAG[dayType], inout),
     ),
   );
+  return tables.flat();
+}
+
+function rowTime(row: TimetableRow, pick: 'depart' | 'arrive'): ServiceMinutes | null {
+  const [primary, fallback] = pick === 'depart' ? [row.LEFTTIME, row.ARRIVETIME] : [row.ARRIVETIME, row.LEFTTIME];
+  return parseTime(primary) ?? parseTime(fallback);
+}
+
+function timesOf(rows: TimetableRow[], pick: 'depart' | 'arrive'): Map<string, ServiceMinutes> {
   const times = new Map<string, ServiceMinutes>();
-  for (const row of tables.flat()) {
-    const [primary, fallback] =
-      pick === 'depart' ? [row.LEFTTIME, row.ARRIVETIME] : [row.ARRIVETIME, row.LEFTTIME];
-    const t = parseTime(primary) ?? parseTime(fallback);
+  for (const row of rows) {
+    const t = rowTime(row, pick);
     if (t !== null) times.set(row.TRAIN_NO, t);
   }
   return times;
+}
+
+/** 반대 방향·순환선 반대로 도는 열차를 거르는 최대 탑승 시간 */
+function maxRideMinutes(rideMinutes: number): number {
+  return rideMinutes * 2 + 10;
+}
+
+/** 두 역 시간표를 열차번호로 조인 (출발은 내림·도착은 올림 — 보수적으로) */
+function joinTrains(
+  departs: Map<string, ServiceMinutes>,
+  arrives: Map<string, ServiceMinutes>,
+  rideMinutes: number,
+): Train[] {
+  const trains: Train[] = [];
+  for (const [trainNo, depart] of departs) {
+    const arrive = arrives.get(trainNo);
+    if (arrive === undefined) continue;
+    const ride = arrive - depart;
+    if (ride > 0 && ride <= maxRideMinutes(rideMinutes)) {
+      trains.push({ trainNo, departAt: Math.floor(depart), arriveAt: Math.ceil(arrive) });
+    }
+  }
+  return trains;
 }
 
 /**
@@ -139,25 +173,66 @@ async function trainsBetween(query: TrainQuery): Promise<Train[] | 'NO_STATION' 
   const toCd = index.get(`${key}|${stationKey(query.segment.to.name)}`);
   if (!fromCd || !toCd) return 'NO_STATION';
 
-  const [departs, arrives] = await Promise.all([
-    stationTimes(fromCd, query.dayType, 'depart'),
-    stationTimes(toCd, query.dayType, 'arrive'),
-  ]);
+  const [fromRows, toRows] = await Promise.all([stationRows(fromCd, query.dayType), stationRows(toCd, query.dayType)]);
+  const departs = timesOf(fromRows, 'depart');
+  const arrives = timesOf(toRows, 'arrive');
   if (departs.size === 0 || arrives.size === 0) return 'EMPTY_TIMETABLE';
+  return joinTrains(departs, arrives, query.segment.rideMinutes);
+}
 
-  // 반대 방향·순환선 반대로 도는 열차 제외
-  const maxRide = query.segment.rideMinutes * 2 + 10;
-  const trains: Train[] = [];
-  for (const [trainNo, depart] of departs) {
-    const arrive = arrives.get(trainNo);
-    if (arrive === undefined) continue;
-    const ride = arrive - depart;
-    if (ride > 0 && ride <= maxRide) {
-      // 출발은 내림(그 분까지 승강장에), 도착은 올림 — 보수적으로
-      trains.push({ departAt: Math.floor(depart), arriveAt: Math.ceil(arrive) });
+/** 한 구간에서 종착역 후보를 몇 곳까지 확인할지 (역마다 시간표 2번 호출) */
+const MAX_TERMINALS = 3;
+
+/**
+ * 내릴 역까지 가는 막차보다 늦게 출발하지만 내릴 역 전에 운행이 끝나는 열차 중 가장 늦은 것.
+ * - 같은 방향(INOUT_TAG)이고, 내릴 역 시간표에 없는 열차
+ * - 종착역이 실제로 가는 길 위인지 확인: 내릴 역까지 가는 열차가 그 종착역을 중간에 지나야 한다
+ *   (5호선 마천/하남처럼 갈라지는 노선에서 다른 갈래로 가는 열차를 거르기 위함)
+ */
+async function latestPartialTrain(query: PartialTrainQuery): Promise<PartialTrain | null> {
+  const index = await stationCodeIndex();
+  const key = lineKey(query.segment.line);
+  const fromCd = index.get(`${key}|${stationKey(query.segment.from.name)}`);
+  const toCd = index.get(`${key}|${stationKey(query.segment.to.name)}`);
+  if (!fromCd || !toCd) return null;
+
+  const [fromRows, toRows] = await Promise.all([stationRows(fromCd, query.dayType), stationRows(toCd, query.dayType)]);
+  const arrives = timesOf(toRows, 'arrive');
+  const fullTrains = joinTrains(timesOf(fromRows, 'depart'), arrives, query.segment.rideMinutes);
+  const last = fullTrains.find((t) => t.departAt === query.after);
+  const direction = last && fromRows.find((r) => r.TRAIN_NO === last.trainNo)?.INOUT_TAG;
+  if (!direction) return null;
+
+  const candidates = fromRows
+    .map((row) => ({ row, depart: rowTime(row, 'depart') }))
+    .filter(
+      (c): c is { row: TimetableRow; depart: ServiceMinutes } =>
+        c.depart !== null &&
+        Math.floor(c.depart) > query.after &&
+        c.row.INOUT_TAG === direction &&
+        Boolean(c.row.DESTSTATION) &&
+        !arrives.has(c.row.TRAIN_NO),
+    )
+    .sort((a, b) => b.depart - a.depart);
+
+  const terminals = [...new Set(candidates.map((c) => c.row.DESTSTATION))].slice(0, MAX_TERMINALS);
+  for (const terminalCd of terminals) {
+    const terminalArrives = timesOf(await stationRows(terminalCd, query.dayType), 'arrive');
+    const onTheWay = fullTrains.some((t) => {
+      const passAt = terminalArrives.get(t.trainNo);
+      return passAt !== undefined && passAt > t.departAt && passAt < t.arriveAt;
+    });
+    if (!onTheWay) continue;
+
+    for (const { row, depart } of candidates) {
+      if (row.DESTSTATION !== terminalCd) continue;
+      const arrive = terminalArrives.get(row.TRAIN_NO);
+      if (arrive === undefined || arrive <= depart || arrive - depart > maxRideMinutes(query.segment.rideMinutes))
+        continue;
+      return { departAt: Math.floor(depart), arriveAt: Math.ceil(arrive), terminal: stationKey(row.SUBWAYENAME) };
     }
   }
-  return trains;
+  return null;
 }
 
 export const seoulTimetableProvider: TimetableProvider = {
@@ -174,8 +249,9 @@ export const seoulTimetableProvider: TimetableProvider = {
     if (candidates.length === 0) return { status: 'NO_TRAIN' };
 
     const best = candidates.reduce((a, b) => (b.departAt > a.departAt ? b : a));
-    return { status: 'OK', ...best };
+    return { status: 'OK', departAt: best.departAt, arriveAt: best.arriveAt };
   },
+  latestPartialTrain,
 };
 
 /**

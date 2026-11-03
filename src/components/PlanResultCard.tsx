@@ -2,9 +2,38 @@ import LegTimeline from './LegTimeline';
 import { stationLabel } from '@/lib/transit/lines';
 import { transferCount, tripMinutes } from '@/lib/transit/planner';
 import { formatClock, formatDuration } from '@/lib/transit/time';
-import type { PlanResult, ServiceMinutes } from '@/lib/transit/types';
+import type { PartialPlan, PlanResult, ServiceMinutes } from '@/lib/transit/types';
 
 type OkPlan = Extract<PlanResult, { ok: true }>;
+
+/** 막차를 놓쳤을 때: 마지막 구간 중간역까지 가는 더 늦은 열차 */
+function PartialNotice({
+  partial,
+  destination,
+  now,
+}: {
+  partial: PartialPlan;
+  destination: string;
+  now: ServiceMinutes | null;
+}) {
+  const lastLeg = partial.legs[partial.legs.length - 1];
+  const remaining = now === null ? null : partial.leaveBy - now;
+  return (
+    <div className="mx-4 mb-3 rounded-xl border border-violet-400/25 bg-violet-500/10 px-3 py-2.5">
+      <p className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold text-violet-100">
+        <span>🌙 이것도 놓쳤다면 {formatClock(partial.leaveBy)}까지 출발</span>
+        {remaining !== null && remaining > 0 && (
+          <span className="text-xs font-normal text-violet-200/70">{formatDuration(Math.floor(remaining))} 남음</span>
+        )}
+      </p>
+      <p className="mt-1 text-xs leading-relaxed text-violet-100/70">
+        {lastLeg.segment.line} {formatClock(lastLeg.departAt)} {stationLabel(partial.terminal)}행을 타면{' '}
+        {stationLabel(partial.terminal)}까지는 가요 ({formatClock(partial.terminalArriveAt)} 도착) ·{' '}
+        {stationLabel(destination)}까지는 택시나 도보로 가야 해요
+      </p>
+    </div>
+  );
+}
 
 interface PlanResultCardProps {
   plan: OkPlan;
@@ -64,6 +93,9 @@ export default function PlanResultCard({ plan, now, dayLabel, bufferMinutes, tit
         {stationLabel(firstStation)}까지 도보 {walk}분 + 여유 {bufferMinutes}분 포함 ·{' '}
         {now === null ? `${dayLabel} 기준 (오늘 아님)` : `${dayLabel} · 기준 ${formatClock(now)}`}
       </p>
+      {plan.partial && (
+        <PartialNotice partial={plan.partial} destination={plan.legs[plan.legs.length - 1].segment.to.name} now={now} />
+      )}
 
       <div className="border-t border-white/10 bg-black/20 px-4 py-3">
         <div className="mb-2 flex items-baseline justify-between gap-2">
