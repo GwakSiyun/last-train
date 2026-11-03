@@ -3,6 +3,8 @@ import Notice from '@/components/Notice';
 import ResultView, { BUFFER_MINUTES } from '@/components/ResultView';
 import SearchForm from '@/components/SearchForm';
 import SearchPanel from '@/components/SearchPanel';
+import type { DestinationPlace } from '@/components/PlanResultCard';
+import { hasKakaoKey, searchPlaces } from '@/lib/transit/kakao';
 import { findByStationName } from '@/lib/transit/lines';
 import { planAllRoutes, SORT_KEYS, type SortKey } from '@/lib/transit/planner';
 import { getProviders, type TransitProviders } from '@/lib/transit/providers';
@@ -13,6 +15,10 @@ import type { DayType, Place, PlanResult, StationOption } from '@/lib/transit/ty
 interface SearchParams {
   from?: string;
   to?: string;
+  /** 도착지를 장소 검색으로 고르면 좌표·주소가 같이 온다 */
+  toLat?: string;
+  toLng?: string;
+  toAddr?: string;
   lat?: string;
   lng?: string;
   sort?: string;
@@ -60,6 +66,43 @@ function resolveOrigin(params: SearchParams, stations: StationOption[]): Place |
   return '현재 위치를 켜거나 출발역을 입력해주세요.';
 }
 
+interface Destination {
+  place: Place;
+  /** 장소 검색 도착지일 때만 — 내릴 출구·마지막 도보를 보여준다 */
+  arrivalPlace?: DestinationPlace;
+  /** 목록에서 고르지 않아 검색 1순위로 정했으면 true (어디로 정했는지 알려준다) */
+  guessed: boolean;
+}
+
+const MAX_ADDRESS_LENGTH = 80;
+
+/** 장소 좌표(고른 것) → 역 이름 → 장소 검색 1순위 순서로 도착지를 정한다 */
+async function resolveDestination(params: SearchParams, stations: StationOption[]): Promise<Destination | string> {
+  const name = params.to?.trim() ?? '';
+  const lat = parseCoord(params.toLat, 33, 39);
+  const lng = parseCoord(params.toLng, 124, 132);
+  if (name && lat !== null && lng !== null) {
+    const address = (params.toAddr ?? '').slice(0, MAX_ADDRESS_LENGTH);
+    return { place: { name, lat, lng }, arrivalPlace: { name, address }, guessed: false };
+  }
+
+  const station = findStation(stations, name);
+  if (station) return { place: { name: station.name, lat: station.lat, lng: station.lng }, guessed: false };
+
+  if (!hasKakaoKey()) return `도착역 "${name}"을(를) 찾지 못했어요. 목록에서 골라주세요.`;
+  try {
+    const [first] = await searchPlaces(name);
+    if (!first) return `"${name}"에 맞는 역이나 장소를 찾지 못했어요. 다른 이름으로 검색해주세요.`;
+    return {
+      place: { name: first.name, lat: first.lat, lng: first.lng },
+      arrivalPlace: { name: first.name, address: first.address },
+      guessed: true,
+    };
+  } catch (e) {
+    return errorText(e);
+  }
+}
+
 async function Result({
   params,
   stations,
@@ -71,54 +114,68 @@ async function Result({
   providers: TransitProviders;
   now: SeoulNow;
 }) {
-  const destination = findStation(stations, params.to);
-  if (!destination) return <Notice>도착역 &quot;{params.to}&quot;을(를) 찾지 못했어요. 목록에서 골라주세요.</Notice>;
+  const destination = await resolveDestination(params, stations);
+  if (typeof destination === 'string') return <Notice>{destination}</Notice>;
+  const { place: to, arrivalPlace } = destination;
 
   const sort = parseSort(params.sort);
   const dayType = parseDay(params.day, now.dayType);
   const nowMinutes = dayType === now.dayType ? now.minutes : null;
   const origin = resolveOrigin(params, stations);
   if (typeof origin === 'string') return <Notice>{origin}</Notice>;
-  if (origin.name === destination.name) return <Notice>출발역과 도착역이 같아요.</Notice>;
+  if (origin.name === to.name) return <Notice>출발역과 도착역이 같아요.</Notice>;
 
   const tabParams = { ...params };
-  const to: Place = { name: destination.name, lat: destination.lat, lng: destination.lng };
+  const guessedNote = destination.guessed && arrivalPlace && (
+    <p className="text-xs text-white/50">
+      &quot;{params.to?.trim()}&quot; → 📍 <strong className="text-white/80">{arrivalPlace.name}</strong> (
+      {arrivalPlace.address})(으)로 계산했어요 · 다른 곳이면 입력칸 목록에서 골라주세요
+    </p>
+  );
 
   // 배포: 브라우저가 ODsay 호출 → 서버 액션이 막차 계산
   if (providers.routeMode === 'browser') {
     return (
-      <LiveResult
-        key={JSON.stringify([origin, to, sort, dayType])}
-        origin={{ name: origin.name, lat: origin.lat, lng: origin.lng }}
-        destination={to}
-        sort={sort}
-        dayType={dayType}
-        today={now.dayType}
-        nowMinutes={nowMinutes}
-        params={tabParams}
-      />
+      <>
+        {guessedNote}
+        <LiveResult
+          key={JSON.stringify([origin, to, sort, dayType])}
+          origin={{ name: origin.name, lat: origin.lat, lng: origin.lng }}
+          destination={to}
+          sort={sort}
+          dayType={dayType}
+          today={now.dayType}
+          nowMinutes={nowMinutes}
+          params={tabParams}
+          arrivalPlace={arrivalPlace}
+        />
+      </>
     );
   }
 
   // 로컬(Server 키)·샘플: 서버에서 모두 계산
   let plans: PlanResult[];
   try {
-    const routes = await providers.routes.findRoutes(origin, destination);
+    const routes = await providers.routes.findRoutes(origin, to);
     plans = await planAllRoutes(routes, providers.timetable, { dayType, bufferMinutes: BUFFER_MINUTES }, sort);
   } catch (e) {
     return <Notice tone="error">경로·시간표를 불러오지 못했어요: {errorText(e)}</Notice>;
   }
 
   return (
-    <ResultView
-      plans={plans}
-      sort={sort}
-      dayType={dayType}
-      today={now.dayType}
-      nowMinutes={nowMinutes}
-      params={tabParams}
-      emptyMessage={providers.isMock ? '이 구간은 샘플 데이터에 경로가 없어요.' : '지하철 경로를 찾지 못했어요.'}
-    />
+    <>
+      {guessedNote}
+      <ResultView
+        plans={plans}
+        sort={sort}
+        dayType={dayType}
+        today={now.dayType}
+        nowMinutes={nowMinutes}
+        params={tabParams}
+        emptyMessage={providers.isMock ? '이 구간은 샘플 데이터에 경로가 없어요.' : '지하철 경로를 찾지 못했어요.'}
+        arrivalPlace={arrivalPlace}
+      />
+    </>
   );
 }
 
@@ -192,7 +249,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Sea
         ) : (
           <div className="hidden h-full min-h-80 place-items-center rounded-2xl border border-dashed border-white/10 text-center text-sm text-white/40 lg:grid">
             <p>
-              도착역을 입력하면
+              도착역이나 장소를 입력하면
               <br />
               몇 시까지 나가야 하는지 여기에 떠요 🚇
             </p>
@@ -205,9 +262,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Sea
       <footer className="grid gap-1.5 border-t border-white/5 pt-4 text-[11px] leading-relaxed text-white/35 lg:col-span-2">
         <h2 className="text-xs font-semibold text-white/50">막차 계산기는 이렇게 계산해요</h2>
         <p>
-          도착역을 입력하고 현재 위치(또는 출발역)를 고르면, 갈 수 있는 지하철 경로마다 마지막 구간의 막차에서
-          거꾸로 계산해 환승역 막차까지 탈 수 있는 가장 늦은 출발 시각을 알려드려요. 역까지 걷는 시간과 환승 도보
-          시간, 여유 3분을 포함해요.
+          도착역(또는 건물·장소)을 입력하고 현재 위치(또는 출발역)를 고르면, 갈 수 있는 지하철 경로마다 마지막 구간의
+          막차에서 거꾸로 계산해 환승역 막차까지 탈 수 있는 가장 늦은 출발 시각을 알려드려요. 역까지 걷는 시간과 환승
+          도보 시간, 여유 3분을 포함해요. 장소로 검색하면 내릴 역의 출구 번호와 출구에서 걷는 시간도 알려드려요.
         </p>
         <p>
           서울 열린데이터광장의 역별 열차 시간표(1~9호선 등)와 공휴일 정보를 사용하고, 평일·토요일·휴일 시간표를

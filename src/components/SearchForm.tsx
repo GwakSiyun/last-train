@@ -1,9 +1,20 @@
+import DestinationField from './DestinationField';
 import LocationField from './LocationField';
 import type { StationOption } from '@/lib/transit/types';
 
 interface SearchFormProps {
   stations: StationOption[];
-  defaults: { from?: string; to?: string; lat?: string; lng?: string; day?: string; sort?: string };
+  defaults: {
+    from?: string;
+    to?: string;
+    toLat?: string;
+    toLng?: string;
+    toAddr?: string;
+    lat?: string;
+    lng?: string;
+    day?: string;
+    sort?: string;
+  };
 }
 
 /** 모바일은 16px — 아이폰 사파리는 입력칸 글자가 16px 미만이면 포커스 때 화면을 확대한다 */
@@ -12,7 +23,7 @@ const fieldClass =
 
 const STATION_LIST_ID = 'station-list';
 
-/** GET 폼 — 위치 버튼만 client, 나머지는 searchParams로 서버에 전달 */
+/** GET 폼 — 위치 버튼·도착지 자동완성만 client, 나머지는 searchParams로 서버에 전달 */
 export default function SearchForm({ stations, defaults }: SearchFormProps) {
   return (
     <form method="GET" className="grid gap-2.5 rounded-2xl border border-white/10 bg-white/[0.03] p-3.5">
@@ -27,7 +38,6 @@ export default function SearchForm({ stations, defaults }: SearchFormProps) {
           </option>
         ))}
       </datalist>
-
 
       <LocationField
         stations={stations.map(({ name, lat, lng, lines }) => ({ name, lat, lng, lines }))}
@@ -49,18 +59,14 @@ export default function SearchForm({ stations, defaults }: SearchFormProps) {
         />
       </label>
 
-      <label className="grid gap-1 text-xs text-white/60">
-        도착역
-        <input
-          name="to"
-          list={STATION_LIST_ID}
-          defaultValue={defaults.to}
-          required
-          autoComplete="off"
-          placeholder="예: 광화문"
-          className={fieldClass}
-        />
-      </label>
+      <DestinationField
+        stations={stations.map(({ name, lines }) => ({ name, lines }))}
+        defaultName={defaults.to}
+        defaultLat={defaults.toLat}
+        defaultLng={defaults.toLng}
+        defaultAddress={defaults.toAddr}
+        className={fieldClass}
+      />
 
       <button
         type="submit"

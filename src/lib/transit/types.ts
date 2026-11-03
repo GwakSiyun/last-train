@@ -13,6 +13,11 @@ export interface Place {
   lng: number;
 }
 
+/** 장소 검색 결과 (도착지를 역이 아닌 건물·주소로 고를 때) */
+export interface PlaceOption extends Place {
+  address: string;
+}
+
 /** 역 선택지 (도착역·출발역 검색용) */
 export interface StationOption extends Place {
   lines: string[];
@@ -42,6 +47,14 @@ export interface Route {
   walkToFirstStationMinutes: number;
   /** segments[i] → segments[i+1] 환승 도보 시간. 길이 = segments.length - 1 */
   transferWalkMinutes: number[];
+  /** 마지막 역 → 목적지. 목적지가 장소(좌표)일 때만 의미 있다 */
+  arrival?: RouteArrival;
+}
+
+export interface RouteArrival {
+  /** 내릴 출구 번호 (ODsay endExitNo). 안 주면 없음 */
+  exitNo?: string;
+  walkMinutes: number;
 }
 
 export interface RouteProvider {

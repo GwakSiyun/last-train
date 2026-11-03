@@ -1,8 +1,9 @@
 'use server';
 
+import { hasKakaoKey, searchPlaces } from '@/lib/transit/kakao';
 import { planAllRoutes, type SortKey } from '@/lib/transit/planner';
 import { getProviders } from '@/lib/transit/providers';
-import type { DayType, PlanResult, Route, Segment } from '@/lib/transit/types';
+import type { DayType, PlaceOption, PlanResult, Route, RouteArrival, Segment } from '@/lib/transit/types';
 
 /**
  * 브라우저가 ODsay에서 받은 경로 → 서버가 서울 시간표로 막차 계산.
@@ -37,6 +38,12 @@ function toSegment(v: unknown): Segment | null {
   };
 }
 
+/** 마지막 역 → 목적지 정보 — 없거나 이상하면 버린다(경로 자체는 유효) */
+function toArrival(v: unknown): RouteArrival | undefined {
+  if (!isObject(v) || !isMinutes(v.walkMinutes)) return undefined;
+  return { walkMinutes: v.walkMinutes, exitNo: optionalShort(v.exitNo) };
+}
+
 function toRoute(v: unknown): Route | null {
   if (!isObject(v) || !Array.isArray(v.segments) || !Array.isArray(v.transferWalkMinutes)) return null;
   if (v.segments.length === 0 || v.segments.length > MAX_SEGMENTS) return null;
@@ -49,6 +56,7 @@ function toRoute(v: unknown): Route | null {
     segments: segments as Segment[],
     walkToFirstStationMinutes: v.walkToFirstStationMinutes,
     transferWalkMinutes: v.transferWalkMinutes,
+    arrival: toArrival(v.arrival),
   };
 }
 
@@ -77,5 +85,18 @@ export async function planRoutesAction(
     return { ok: true, plans };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : '막차를 계산하지 못했어요.' };
+  }
+}
+
+const MAX_QUERY_LENGTH = 40;
+
+/** 도착지 입력 자동완성 — 카카오 키는 서버에만 있어서 브라우저는 이 액션으로 검색한다 */
+export async function searchPlacesAction(query: unknown): Promise<PlaceOption[]> {
+  const q = typeof query === 'string' ? query.trim() : '';
+  if (q.length < 2 || q.length > MAX_QUERY_LENGTH || !hasKakaoKey()) return [];
+  try {
+    return await searchPlaces(q);
+  } catch {
+    return []; // 자동완성 실패는 조용히 — 역 이름 입력은 그대로 된다
   }
 }
