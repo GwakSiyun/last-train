@@ -19,6 +19,7 @@ interface OdsaySubPath {
   lane?: { name: string }[];
   way?: string;
   door?: string;
+  endExitNo?: string | number;
   startName?: string;
   endName?: string;
 }
@@ -74,15 +75,16 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * 좌표는 소수 3자리(~100m)로 반올림 — 같은 동네 검색이 같은 캐시 키가 되도록 (Basic 하루 30회).
- * apiKey는 호출하는 쪽에서 붙인다.
+ * 출발 좌표는 소수 3자리(~100m)로 반올림 — 같은 동네 검색이 같은 캐시 키가 되도록 (Basic 하루 30회).
+ * 도착 좌표는 4자리(~10m) — 장소 검색일 때 ODsay가 고르는 출구가 반올림 때문에 바뀌지 않도록.
+ * (역·장소 좌표는 고정값이라 캐시 적중률에는 영향 없음) apiKey는 호출하는 쪽에서 붙인다.
  */
 export function odsayQuery(origin: Place, destination: Place): URLSearchParams {
   return new URLSearchParams({
     SX: origin.lng.toFixed(3),
     SY: origin.lat.toFixed(3),
-    EX: destination.lng.toFixed(3),
-    EY: destination.lat.toFixed(3),
+    EX: destination.lng.toFixed(4),
+    EY: destination.lat.toFixed(4),
     SearchPathType: SUBWAY_ONLY,
   });
 }
@@ -94,8 +96,8 @@ export function odsayCacheKey(query: URLSearchParams): string {
 /**
  * 값이 없으면 태그가 빠지거나 문자열 "null"로 온다 → 둘 다 없음 처리.
  * 2026-10-29 실응답(홍대입구→노원): 2호선 door "9-1", 마지막 4호선 door "null".
- * ⚠️ startExitNo/endExitNo(출구 번호)는 일부러 안 쓴다: 목적지가 '역 대표 좌표'라 그 점에서 가까운 출구일 뿐
- *    사용자의 실제 목적지와 무관하다 (좌표 반올림만 달라도 3번↔2번으로 바뀜). 장소 검색이 생기면 다시 검토.
+ * 출구 번호(endExitNo)와 마지막 도보는 목적지 좌표 기준이다 (2026-11-03 실응답: 롯데백화점 노원점 → 노원 4번, 도보 4분).
+ * ⚠️ 목적지가 '역 대표 좌표'면 그 점에서 가까운 출구일 뿐이라 무의미 → 화면은 장소 검색일 때만 보여준다.
  */
 function optionalText(value: unknown): string | undefined {
   if (typeof value !== 'string' && typeof value !== 'number') return undefined;
@@ -108,6 +110,7 @@ function toRoute(path: OdsayPath): Route | null {
   const transferWalkMinutes: number[] = [];
   let walkToFirstStationMinutes = 0;
   let pendingWalk = 0;
+  let lastExitNo: string | undefined;
 
   for (const sub of path.subPath) {
     if (sub.trafficType === TRAFFIC_WALK) {
@@ -119,6 +122,7 @@ function toRoute(path: OdsayPath): Route | null {
     if (segments.length === 0) walkToFirstStationMinutes = pendingWalk;
     else transferWalkMinutes.push(pendingWalk);
     pendingWalk = 0;
+    lastExitNo = optionalText(sub.endExitNo);
 
     segments.push({
       line: lineLabel(sub.lane?.[0]?.name ?? '지하철'),
@@ -130,7 +134,14 @@ function toRoute(path: OdsayPath): Route | null {
     });
   }
 
-  return segments.length > 0 ? { segments, walkToFirstStationMinutes, transferWalkMinutes } : null;
+  if (segments.length === 0) return null;
+  // 루프가 끝난 뒤 남은 pendingWalk = 마지막 역 → 목적지 도보
+  return {
+    segments,
+    walkToFirstStationMinutes,
+    transferWalkMinutes,
+    arrival: { exitNo: lastExitNo, walkMinutes: pendingWalk },
+  };
 }
 
 /** 응답 → 경로 목록. 오류 응답이면 OdsayError */

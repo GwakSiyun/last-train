@@ -35,6 +35,12 @@ function PartialNotice({
   );
 }
 
+/** 장소 검색으로 고른 도착지 — 이때만 출구·마지막 도보가 의미 있다 */
+export interface DestinationPlace {
+  name: string;
+  address: string;
+}
+
 interface PlanResultCardProps {
   plan: OkPlan;
   /** 오늘이 아닌 요일 시간표를 보고 있으면 null — 남은 시간을 계산하지 않는다 */
@@ -44,6 +50,7 @@ interface PlanResultCardProps {
   bufferMinutes: number;
   /** 정렬 기준에 맞춘 추천 이유 (예: "가장 빨리 도착하는 경로") */
   title: string;
+  arrivalPlace?: DestinationPlace;
 }
 
 const URGENT_MINUTES = 15;
@@ -54,8 +61,35 @@ export function routeStats(plan: OkPlan): string {
   return `소요 ${formatDuration(tripMinutes(plan))} · ${transfers === 0 ? '환승 없음' : `환승 ${transfers}회`}`;
 }
 
+/** 마지막 역에서 내려 목적지까지 — "노원역 4번 출구로 나가서 도보 4분 · 01:04쯤 도착" */
+function ArrivalLine({ plan, place }: { plan: OkPlan; place: DestinationPlace }) {
+  const { arrival } = plan.route;
+  if (!arrival) return null;
+  const station = stationLabel(plan.legs[plan.legs.length - 1].segment.to.name);
+  return (
+    <div className="mt-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+      <p>
+        🚪 {station} {arrival.exitNo ? <strong className="text-emerald-50">{arrival.exitNo}번 출구</strong> : ''}
+        {arrival.exitNo ? '로 나가서' : '에서'} 도보 {arrival.walkMinutes}분 ·{' '}
+        <span className="tabular-nums">{formatClock(plan.arriveAt + arrival.walkMinutes)}</span>쯤 도착
+      </p>
+      <p className="mt-0.5 truncate text-[11px] text-emerald-200/60">
+        📍 {place.name}
+        {place.address && ` · ${place.address}`}
+      </p>
+    </div>
+  );
+}
+
 /** 출발 마감 시각 + 구간 타임라인을 한 카드에 */
-export default function PlanResultCard({ plan, now, dayLabel, bufferMinutes, title }: PlanResultCardProps) {
+export default function PlanResultCard({
+  plan,
+  now,
+  dayLabel,
+  bufferMinutes,
+  title,
+  arrivalPlace,
+}: PlanResultCardProps) {
   const remaining = now === null ? null : plan.leaveBy - now;
   const missed = remaining !== null && remaining < 0;
   const urgent = remaining !== null && !missed && remaining <= URGENT_MINUTES;
@@ -103,6 +137,7 @@ export default function PlanResultCard({ plan, now, dayLabel, bufferMinutes, tit
           <span className="text-[11px] text-white/50">{routeStats(plan)}</span>
         </div>
         <LegTimeline plan={plan} />
+        {arrivalPlace && <ArrivalLine plan={plan} place={arrivalPlace} />}
       </div>
     </section>
   );

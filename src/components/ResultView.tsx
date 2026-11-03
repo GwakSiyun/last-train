@@ -1,6 +1,6 @@
 import Notice from './Notice';
 import OtherRoutes from './OtherRoutes';
-import PlanResultCard from './PlanResultCard';
+import PlanResultCard, { type DestinationPlace } from './PlanResultCard';
 import QueryTabs, { type TabOption } from './QueryTabs';
 import type { SortKey } from '@/lib/transit/planner';
 import { DAY_TYPE_LABEL } from '@/lib/transit/time';
@@ -51,9 +51,20 @@ interface ResultViewProps {
   nowMinutes: ServiceMinutes | null;
   params: Params;
   emptyMessage: string;
+  /** 장소 검색 도착지일 때만 */
+  arrivalPlace?: DestinationPlace;
 }
 
-export default function ResultView({ plans, sort, dayType, today, nowMinutes, params, emptyMessage }: ResultViewProps) {
+export default function ResultView({
+  plans,
+  sort,
+  dayType,
+  today,
+  nowMinutes,
+  params,
+  emptyMessage,
+  arrivalPlace,
+}: ResultViewProps) {
   const dayTabs = <DayTabs current={dayType} today={today} params={params} />;
   if (plans.length === 0) {
     return (
@@ -69,7 +80,14 @@ export default function ResultView({ plans, sort, dayType, today, nowMinutes, pa
     <>
       {dayTabs}
       {plans.filter((p) => p.ok).length > 1 && (
-        <QueryTabs label="정렬" paramKey="sort" options={SORT_OPTIONS} current={sort} defaultValue="late" params={params} />
+        <QueryTabs
+          label="정렬"
+          paramKey="sort"
+          options={SORT_OPTIONS}
+          current={sort}
+          defaultValue="late"
+          params={params}
+        />
       )}
       {best.ok ? (
         <PlanResultCard
@@ -78,6 +96,7 @@ export default function ResultView({ plans, sort, dayType, today, nowMinutes, pa
           dayLabel={DAY_TYPE_LABEL[dayType]}
           bufferMinutes={BUFFER_MINUTES}
           title={CARD_TITLE[sort]}
+          arrivalPlace={arrivalPlace}
         />
       ) : (
         <Notice>

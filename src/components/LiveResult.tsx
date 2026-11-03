@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 import Notice from './Notice';
+import type { DestinationPlace } from './PlanResultCard';
 import ResultView, { BUFFER_MINUTES, DayTabs } from './ResultView';
 import { planRoutesAction } from '@/app/actions';
 import { fetchRoutesInBrowser } from '@/lib/transit/odsayBrowser';
@@ -18,6 +19,7 @@ interface LiveResultProps {
   today: DayType;
   nowMinutes: ServiceMinutes | null;
   params: Record<string, string | undefined>;
+  arrivalPlace?: DestinationPlace;
 }
 
 function failText(detail: string): string {
@@ -31,7 +33,16 @@ type State = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 
  * 데이터를 브라우저에서 가져오는 건 Vercel IP 제약 때문 (서버 우선 원칙의 예외).
  * 검색 조건이 바뀌면 부모가 key를 바꿔 새로 마운트한다 → 항상 loading부터 시작.
  */
-export default function LiveResult({ origin, destination, sort, dayType, today, nowMinutes, params }: LiveResultProps) {
+export default function LiveResult({
+  origin,
+  destination,
+  sort,
+  dayType,
+  today,
+  nowMinutes,
+  params,
+  arrivalPlace,
+}: LiveResultProps) {
   const [state, setState] = useState<State>({ kind: 'loading' });
   // 서버에서 다시 렌더되면 같은 값도 새 객체로 오므로, 값 기준으로 비교
   const request = JSON.stringify({ origin, destination, sort, dayType });
@@ -48,7 +59,8 @@ export default function LiveResult({ origin, destination, sort, dayType, today, 
         }
       } catch (e) {
         // ODsay 오류는 이미 안내 문장으로 만들어져 있다
-        const message = e instanceof OdsayError ? e.message : failText(e instanceof Error ? e.message : '알 수 없는 오류');
+        const message =
+          e instanceof OdsayError ? e.message : failText(e instanceof Error ? e.message : '알 수 없는 오류');
         if (!cancelled) setState({ kind: 'error', message });
       }
     })();
@@ -78,6 +90,7 @@ export default function LiveResult({ origin, destination, sort, dayType, today, 
       nowMinutes={nowMinutes}
       params={params}
       emptyMessage="지하철 경로를 찾지 못했어요."
+      arrivalPlace={arrivalPlace}
     />
   );
 }
