@@ -1,3 +1,4 @@
+import FeedbackButton from '@/components/FeedbackButton';
 import LiveResult from '@/components/LiveResult';
 import Notice from '@/components/Notice';
 import ResultView, { BUFFER_MINUTES } from '@/components/ResultView';
@@ -219,6 +220,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Sea
           <p className="hidden text-sm text-white/60 lg:mt-1 lg:block">
             환승까지 따져서, 몇 시까지 나가야 막차를 탈 수 있는지 알려드려요.
           </p>
+          <div className="lg:mt-3">
+            <FeedbackButton />
+          </div>
         </header>
 
         {providers.isMock && (
