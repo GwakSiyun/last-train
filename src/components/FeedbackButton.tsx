@@ -50,7 +50,6 @@ function SubmitButton() {
 
 function FeedbackForm({ onClose }: { onClose: () => void }) {
   const [state, action] = useActionState<FeedbackState, FormData>(sendFeedbackAction, { status: 'idle' });
-  const [openedAt] = useState(() => Date.now());
 
   if (state.status === 'sent') {
     return (
@@ -93,7 +92,6 @@ function FeedbackForm({ onClose }: { onClose: () => void }) {
       </label>
       {/* 봇 걸러내기용 — 사람에겐 안 보인다 */}
       <input name="website" tabIndex={-1} autoComplete="off" aria-hidden className="hidden" />
-      <input type="hidden" name="openedAt" value={openedAt} />
       <input type="hidden" name="source" value={savedSource()} />
 
       {state.status === 'error' && <p className="text-xs text-rose-300">{state.message}</p>}
