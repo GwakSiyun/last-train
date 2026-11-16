@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
-  keywords: ["막차 계산기", "지하철 막차", "막차 시간", "환승 막차", "서울 지하철 막차", "막차 출발 시간"],
+  keywords: ["막차 계산기", "지하철 막차", "지하철 막차시간", "지하철 몇시까지", "토요일 지하철 막차", "막차 시간", "환승 막차", "서울 지하철 막차", "막차 출발 시간"],
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
